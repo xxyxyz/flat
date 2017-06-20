@@ -1,94 +1,91 @@
-
+from __future__ import division
 from struct import Struct
 from zlib import compress, crc32, decompress
-
 from .readable import readable
 
 
 
 
-def _paeth(a, b, c):
+def _paeth_predictor(a, b, c):
     pa = abs(b - c)
     pb = abs(a - c)
     pc = abs(a + b - c - c)
     if pa <= pb and pa <= pc:
         return a
-    else:
-        return b if pb <= pc else c
+    if pb <= pc:
+        return b
+    return c
 
-
-def _heuristic(image):
-    
-    n = image.count
-    w = image.width * n
-    
+def _adaptive_filtering(image):
+    wn, n = image.width*image.n, image.n
+    s, t = bytearray(wn), bytearray(wn)
+    previous = bytearray(wn)
     cache = [i if i < 128 else 256-i for i in range(256)]
-    
-    type1, type2, type3, type4 = (bytearray(w) for i in range(4))
-    
     content = []
-    previous = bytearray(w)
-    
-    for row in image.rows:
+    for y in range(image.height):
+        offset = y*wn
+        row = image.data[offset:offset+wn]
         
-        minimum = 0 # up
-        for i in range(0, w):
-            type2[i] = (row[i] - previous[i]) & 0xff
-            minimum += cache[type2[i]]
-        code, scanline = '\2', type2
-        
-        m = 0 # none
-        for i in range(0, w):
-            m += cache[row[i]]
-            if m >= minimum:
-                break
-        else:
-            minimum = m
-            code, scanline = '\0', row
+        minimum = 0 # none
+        for v in row:
+            minimum += cache[v]
+        code, scanline = '\0', row
         
         m = 0 # sub
         for i in range(0, n):
-            type1[i] = row[i]
-            m += cache[type1[i]]
-        for i in range(n, w):
-            type1[i] = (row[i] - row[i - n]) & 0xff
-            m += cache[type1[i]]
+            s[i] = v = row[i]
+            m += cache[v]
+        for i in range(n, wn):
+            s[i] = v = (row[i] - row[i - n]) & 0xff
+            m += cache[v]
             if m >= minimum:
                 break
         else:
             minimum = m
-            code, scanline = '\1', type1
+            code, scanline = '\1', s
+            s, t = t, s
+        
+        m = 0 # up
+        for i in range(0, wn):
+            s[i] = v = (row[i] - previous[i]) & 0xff
+            m += cache[v]
+            if m >= minimum:
+                break
+        else:
+            minimum = m
+            code, scanline = '\2', s
+            s, t = t, s
         
         m = 0 # average
         for i in range(0, n):
-            type3[i] = (row[i] - previous[i] // 2) & 0xff
-            m += cache[type3[i]]
-        for i in range(n, w):
-            type3[i] = (row[i] - (row[i - n] + previous[i]) // 2) & 0xff
-            m += cache[type3[i]]
+            s[i] = v = (row[i] - previous[i]//2) & 0xff
+            m += cache[v]
+        for i in range(n, wn):
+            s[i] = v = (row[i] - (row[i - n] + previous[i])//2) & 0xff
+            m += cache[v]
             if m >= minimum:
                 break
         else:
             minimum = m
-            code, scanline = '\3', type3
+            code, scanline = '\3', s
+            s, t = t, s
         
         m = 0 # paeth
         for i in range(0, n):
-            type4[i] = (row[i] - previous[i]) & 0xff
-            m += cache[type4[i]]
-        for i in range(n, w):
-            type4[i] = (row[i] - _paeth(
-                row[i - n], previous[i], previous[i - n])) & 0xff
-            m += cache[type4[i]]
+            s[i] = v = (row[i] - previous[i]) & 0xff
+            m += cache[v]
+        for i in range(n, wn):
+            a, b, c = row[i - n], previous[i], previous[i - n]
+            s[i] = v = (row[i] - _paeth_predictor(a, b, c)) & 0xff
+            m += cache[v]
             if m >= minimum:
                 break
         else:
-            code, scanline = '\4', type4
+            code, scanline = '\4', s
         
-        content.extend((code, str(scanline))) # TODO python 3: remove str
-        
+        content.append(code)
+        content.append(bytes(scanline)) # TODO python 3: remove bytes
         previous = row
-    
     return ''.join(content)
 
 
@@ -101,88 +98,108 @@ class png(object):
         return data.startswith('\x89PNG\r\n\x1a\n')
     
     def __init__(self, data):
-        self.data = data
-        r = readable(data)
-        head, ihdr = '>L4s', '>LLBBBBBL'
-        
+        self.readable = r = readable(data)
         r.skip(8) # header
-        length, name = r.parse(head)
-        assert name == 'IHDR', 'Invalid chunk found.'
-        self.width, self.height, self.depth, \
-            color, compression, fltr, interlace, crc = r.parse(ihdr)
-        assert self.depth == 8, 'Unsupported bit depth.'
-        assert color in (0, 2, 4, 6), 'Unsupported color type.'
-        assert compression == 0, 'Invalid compression method.'
-        assert fltr == 0, 'Invalid filter method.'
-        assert interlace == 0, 'Unsupported interlace method.'
-        self.kind, self.count = \
-            ('g', 1) if color == 0 else \
-            ('ga', 2) if color == 4 else \
-            ('rgb', 3) if color == 2 else ('rgba', 4)
-        
-        self.idats = []
-        while True:
-            length, name = r.parse(head)
-            if name == 'IDAT':
-                self.idats.append((r.position, r.position+length))
-            elif name == 'IEND':
-                break
-            r.skip(length + 4) # crc
+        length, name = r.parse('>L4s')
+        if length != 13 or name != 'IHDR':
+            raise ValueError('Invalid IHDR chunk.')
+        self.width, self.height, \
+            depth, color, compression, fltr, interlace = r.parse('>LLBBBBB') # IHDR
+        if depth != 8:
+            raise ValueError('Unsupported bit depth.')
+        if color == 0:
+            self.kind, self.n = 'g', 1
+        elif color == 4:
+            self.kind, self.n = 'ga', 2
+        elif color == 2:
+            self.kind, self.n = 'rgb', 3
+        elif color == 6:
+            self.kind, self.n = 'rgba', 4
+        else:
+            raise ValueError('Unsupported color type.')
+        if compression != 0:
+            raise ValueError('Invalid compression method.')
+        if fltr != 0:
+            raise ValueError('Invalid filter method.')
+        if interlace != 0:
+            raise ValueError('Unsupported interlace method.')
     
     def idat(self):
-        return ''.join(self.data[s:e] for s,e in self.idats)
+        r = self.readable
+        r.jump(8 + 4 + 4 + 13 + 4) # header, length, name, IHDR, CRC
+        parts = []
+        while True:
+            length, name = r.parse('>L4s')
+            if name == 'IEND':
+                break
+            if name == 'IDAT':
+                parts.append(r.read(length))
+            else:
+                r.skip(length)
+            r.skip(4) # CRC
+        return bytearray().join(parts)
     
     def decompress(self):
-        content = decompress(self.idat())
-        n = self.count
-        w, w1 = self.width * n, self.width * n + 1
-        assert w1 * self.height == len(content), 'Invalid content length.'
+        wn, n = self.width*self.n, self.n
+        content = bytearray(decompress(bytes(self.idat()))) # TODO python 3: remove bytearray/bytes
+        if (wn + 1)*self.height != len(content):
+            raise ValueError('Invalid content length.')
         rows = []
-        previous = bytearray(w)
-        for offset in range(0, self.height * w1, w1):
-            kind = ord(content[offset])
-            row = bytearray(content[offset+1:offset+w1])
+        previous = bytearray(wn)
+        for y in range(self.height):
+            offset = y*(wn + 1)
+            kind = content[offset]
+            row = content[offset+1:offset+(wn + 1)]
             if kind == 0: # none
                 pass
             elif kind == 1: # sub
-                for i in range(n, w):
+                for i in range(n, wn):
                     row[i] = (row[i] + row[i - n]) & 0xff
             elif kind == 2: # up
-                for i in range(w):
+                for i in range(wn):
                     row[i] = (row[i] + previous[i]) & 0xff
             elif kind == 3: # average
                 for i in range(0, n):
-                    row[i] = (row[i] + previous[i] // 2) & 0xff
-                for i in range(n, w):
-                    row[i] = (row[i] + (row[i - n] + previous[i]) // 2) & 0xff
+                    row[i] = (row[i] + previous[i]//2) & 0xff
+                for i in range(n, wn):
+                    row[i] = (row[i] + (row[i - n] + previous[i])//2) & 0xff
             elif kind == 4: # paeth
                 for i in range(0, n):
                     row[i] = (row[i] + previous[i]) & 0xff
-                for i in range(n, w):
-                    row[i] = (row[i] + _paeth(
-                        row[i - n], previous[i], previous[i - n])) & 0xff
+                for i in range(n, wn):
+                    a, b, c = row[i - n], previous[i], previous[i - n]
+                    row[i] = (row[i] + _paeth_predictor(a, b, c)) & 0xff
             else:
-                raise AssertionError('Invalid filter method.')
+                raise ValueError('Invalid filter method.')
             rows.append(row)
             previous = row
-        return rows
-    
-    @staticmethod
-    def dump(image, optimized):
-        assert image.kind in ('g', 'ga', 'rgb', 'rgba'), 'Invalid image kind.'
-        L = Struct('>L').pack # unsigned long
-        color = ('\0', '\4', '\2', '\6')[image.count - 1]
-        ihdr = L(image.width) + L(image.height) + '\10' + color + '\0\0\0'
-        if optimized:
-            content = _heuristic(image)
-        else:
-            content = '\0'.join(map(str, [''] + image.rows)) # TODO python 3: remove str
-        idat = compress(content, 9 if optimized else 6)
-        return ''.join((
-            '\x89PNG\r\n\x1a\n',
-            L(len(ihdr)), 'IHDR', ihdr, L(crc32(ihdr, crc32('IHDR')) & 0xffffffff),
-            L(len(idat)), 'IDAT', idat, L(crc32(idat, crc32('IDAT')) & 0xffffffff),
-            L(0), 'IEND', L(crc32('IEND') & 0xffffffff)))
+        return bytearray().join(rows)
+
+
+
+
+def serialize(image, optimized):
+    if image.kind not in ('g', 'ga', 'rgb', 'rgba'):
+        raise ValueError('Invalid image kind.')
+    L = Struct('>L').pack # unsigned long
+    color = '\0\4\2\6'[image.n - 1]
+    ihdr = L(image.width) + L(image.height) + '\10' + color + '\0\0\0'
+    if optimized:
+        content = _adaptive_filtering(image)
+    else:
+        parts = []
+        wn, n = image.width*image.n, image.n
+        for y in range(image.height):
+            offset = y*wn
+            parts.append('\0')
+            parts.append(bytes(image.data[offset:offset+wn])) # TODO python 3: remove bytes
+        content = ''.join(parts)
+    idat = compress(content, 9 if optimized else 6)
+    return ''.join((
+        '\x89PNG\r\n\x1a\n',
+        L(len(ihdr)), 'IHDR', ihdr, L(crc32(ihdr, crc32('IHDR')) & 0xffffffff),
+        L(len(idat)), 'IDAT', idat, L(crc32(idat, crc32('IDAT')) & 0xffffffff),
+        L(0), 'IEND', L(crc32('IEND') & 0xffffffff)))
 
 
 

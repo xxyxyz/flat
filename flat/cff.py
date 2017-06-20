@@ -1,45 +1,44 @@
-
+from __future__ import division
 from collections import deque
-
 from .command import moveto, lineto, curveto, closepath
-from .readable import readable
 
 
 
 
 class cff(object):
     
-    @staticmethod
-    def valid(data):
-        return data.startswith('\1\0')
-    
-    def __init__(self, data):
-        self.readable = readable(data)
-        major, minor, hdrSize, offSize = self.readable.parse('>4B')
+    def __init__(self, readable):
+        self.readable = r = readable
+        origin = r.position
+        major, minor, hdrSize, offSize = r.parse('>4B')
+        if major != 1 or minor != 0:
+            raise ValueError('Invalid CFF table.')
         name = self.index()
         top = self.index()
-        assert len(name) == len(top) == 2, 'Unsupported FontSet count.'
+        if len(name) != 2 or len(top) != 2:
+            raise ValueError('Unsupported FontSet count.')
         string = self.index()
         self.globalsubr = self.index()
         topdict = self.dict(top[0], top[1])
         size, offset = topdict[18] # Private
+        offset += origin
         privatedict = self.dict(offset, offset + size)
-        self.localsubr = [] if 19 not in privatedict else \
-            self.index(offset + privatedict[19][0]) # Subrs
+        self.localsubr = self.index(offset + privatedict[19][0]) \
+            if 19 in privatedict else [] # Subrs
         g, l = len(self.globalsubr), len(self.localsubr)
         self.globalbias = 107 if g < 1240 else 1131 if g < 33900 else 32768
         self.localbias = 107 if l < 1240 else 1131 if l < 33900 else 32768
-        self.charstrings = self.index(topdict[17][0]) # CharStrings
+        self.charstrings = self.index(origin + topdict[17][0]) # CharStrings
     
     def index(self, offset=0):
         r = self.readable
-        if offset:
+        if offset > 0:
             r.jump(offset)
         offsets = []
         count = r.uint16()
         if count > 0:
             offSize = r.uint8()
-            start = r.position + (count + 1) * offSize - 1
+            start = r.position + (count + 1)*offSize - 1
             for j in range(count + 1):
                 offset = r.uint8()
                 for i in range(offSize - 1):
@@ -77,12 +76,13 @@ class cff(object):
             elif 32 <= value <= 246:
                 operands.append(value - 139)
             elif 247 <= value <= 250:
-                operands.append((value - 247) * 256 + r.uint8() + 108)
+                operands.append((value - 247)*256 + r.uint8() + 108)
             elif 251 <= value <= 254:
-                operands.append((251 - value) * 256 - r.uint8() - 108)
+                operands.append((251 - value)*256 - r.uint8() - 108)
             else:
-                raise AssertionError('Reserved value.')
-        assert not operands, 'Invalid DICT.'
+                raise ValueError('Reserved value.')
+        if operands:
+            raise ValueError('Invalid DICT.')
         return result
     
     def type2(self, index):
@@ -97,9 +97,9 @@ class cff(object):
             value = r.uint8()
             if value <= 31:
                 if value in (1, 3, 18, 19, 20, 23): # hstem, vstem, hstemhm, hintmask, cntrmask, vstemhm
-                    hints += len(stack) // 2
+                    hints += len(stack)//2
                     if value == 19 or value == 20:
-                        r.skip((hints + 7) // 8)
+                        r.skip((hints + 7)//8)
                     stack.clear()
                 elif value == 4 or value == 21 or value == 22: # vmoveto, rmoveto, hmoveto
                     if result:
@@ -193,9 +193,9 @@ class cff(object):
                         pass
                     elif value in (3, 4, 5, 9, 10, 11, 12, 14, 15, 18, 20, 21,
                         22, 23, 24, 26, 27, 28, 29, 30): # aritmetic, storage, conditional operators
-                        raise NotImplementedError
+                        raise NotImplementedError('Unsupported Type 2 operator.')
                     else:
-                        raise AssertionError('Reserved value.')
+                        raise ValueError('Reserved value.')
                 elif value == 14: # endchar
                     # stack.clear()
                     break
@@ -242,15 +242,15 @@ class cff(object):
                         vertical = not vertical
                         result.append(curveto(a, b, c, d, x, y))
                 else:
-                    raise AssertionError('Reserved value.')
+                    raise ValueError('Reserved value.')
             elif value <= 246:
                 stack.append(value - 139)
             elif value <= 250:
-                stack.append((value - 247) * 256 + r.uint8() + 108)
+                stack.append((value - 247)*256 + r.uint8() + 108)
             elif value <= 254:
-                stack.append((251 - value) * 256 - r.uint8() - 108)
+                stack.append((251 - value)*256 - r.uint8() - 108)
             else: # 255
-                stack.append(r.int32() / 65536.0)
+                stack.append(r.int32()/65536.0)
         if result:
             result.append(closepath)
         return result

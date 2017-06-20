@@ -1,7 +1,5 @@
-
+from __future__ import division
 from .otf import otf
-from .shape import path
-from .utils import memoize
 
 
 
@@ -11,61 +9,42 @@ class font(object):
     @staticmethod
     def open(path, index=0):
         with open(path, 'rb') as f:
-            data = f.read()
+            data = bytearray(f.read()) # TODO python 3: bytearray -> bytes
             if otf.valid(data):
                 source = otf(data, index)
                 return font(source)
-            raise AssertionError('Unsupported font format.')
+            raise ValueError('Unsupported font format.')
     
     def __init__(self, source):
         self.source = source
-        self.name = source.psname()
-        self.charmap = source.charmap()
-        self.kerning = source.kerning()
-        self.advances = source.advances()
-        self.defaultadvance = source.defaultadvance()
+        self.name = bytes(source.psname()) # # TODO python 3: remove bytes
+        self.density = source.density()
         self.ascender = source.ascender()
         self.descender = source.descender()
-        self.density = source.density()
+        self.charmap = source.charmap()
+        self.advances = source.advances()
+        self.kerning = source.kerning()
+        self.glyphs = {}
     
-    @memoize
     def glyph(self, index):
-        commands = self.source.glyph(index)
-        for c in commands:
-            c.flip()
-        return path(None, *commands)
+        if index not in self.glyphs:
+            commands = self.source.glyph(index)
+            for c in commands:
+                c.transform(1, 0, 0, -1, 0, 0)
+            self.glyphs[index] = commands
+        return self.glyphs[index]
     
-    @memoize
-    def glyph2(self, index, scale):
-        return self.glyph(index).reduced(scale)
-    
-    @memoize
-    def glyph3(self, index):
-        return self.glyph(index).elevated()
-    
-    def relativewidth(self, string, left, size):
-        charmap, kerning, advances = self.charmap, self.kerning, self.advances
-        fix, first = 0.0, True
-        result = 0.0
-        for c in string:
-            code = ord(c)
-            if code in charmap:
-                right = charmap[code]
-                pair = kerning[left]
-                if right in pair:
-                    value = pair[right]
-                    if first:
-                        fix = value
-                    else:
-                        result -= value
-                result += advances[right]
-                left = right
-            else:
-                result += advances[0]
-                left = 0
-            first = False
-        scale = size * self.density
-        return fix * scale, result * scale, left
+    def glyphmap(self):
+        result = [(i, c) for c, i in self.charmap.items() if i != 0]
+        result.sort()
+        i = 0
+        for j in range(1, len(result)):
+            if result[i][0] != result[j][0]:
+                i += 1
+                if i < j:
+                    result[i] = result[j]
+        result[i+1:] = []
+        return result
 
 
 

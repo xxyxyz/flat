@@ -1,364 +1,501 @@
-
+from __future__ import division
 from base64 import b64encode
-from copy import deepcopy
-from itertools import izip # TODO python 3: izip -> zip
 from math import ceil, exp, floor, log, pi, sin
-
-from .png import png
-from .jpeg import jpeg
-from .utils import clamp, dump, equal, lazy, pascal, record, save, staircase
-
+from .jpeg import jpeg, serialize as jpegserialize
+from .misc import dump, save, similar
+from .png import png, serialize as pngserialize
 
 
 
-def _nearest(x):
+
+def nearest_kernel(x):
     if -0.5 <= x < 0.5:
-        return 1
-    return 0
+        return 1.0
+    return 0.0
 
-def _bicubic(x):
-    if x < 0:
+def _bicubic_kernel(x):
+    if x < 0.0:
         x = -x
-    if x < 1:
-        return (1.25 * x - 2.25) * x * x + 1
-    if x < 2:
-        return ((-0.75 * x + 3.75) * x - 6) * x + 3
-    return 0
+    if x < 1.0:
+        return (1.5*x - 2.5)*x*x + 1.0
+    if x < 2.0:
+        return ((-0.5*x + 2.5)*x - 4.0)*x + 2.0
+    return 0.0
 
-def _lanczos(x):
-    if x < 0:
+def _lanczos_kernel(x):
+    if x < 0.0:
         x = -x
-    if x < 0.00001:
-        return 1
-    if x < 3:
-        return 3 * sin(pi * x) * sin(pi * x / 3) / (pi * pi * x * x)
-    return 0
+    if x < 1e-10:
+        return 1.0
+    if x < 5.0:
+        x *= pi
+        return 5.0*sin(x)*sin(x/5.0)/(x*x)
+    return 0.0
 
-def _contributions(old, new, function, size, count):
-    scale = float(new) / old
-    bound = old - 1
-    if old > new:
-        f = function
-        function = lambda x: f(x * scale) * scale
-        size /= scale
-    result = []
-    for j in range(new):
-        center = (j + 0.5) / scale - 0.5
-        left = int(ceil(center - size))
-        right = int(floor(center + size))
-        c = []
-        for i in range(left, right + 1):
-            pixel = (0 if i < 0 else bound if i > bound else i) * count
-            weight = int(function(center - i) * (1 << 52) + 0.5)
-            c.append((pixel, weight))
-        result.append(tuple(c))
-    return result
+def _kernel_contribution(index, scale, length, kernel, support):
+    factor = max(1.0, scale)
+    support *= factor
+    x = (index + 0.5)*scale - 0.5
+    left = max(0, int(ceil(x - support)))
+    right = min(int(floor(x + support)), length - 1)
+    weights = []
+    total = 0.0
+    i = left
+    while i <= right:
+        w = kernel((x - i)/factor)
+        weights.append(w)
+        total += w
+        i += 1
+    if total != 1.0:
+        for i in range(len(weights)):
+            weights[i] /= total
+    return left, weights
 
 
 
 
 class image(object):
     
+    __slots__ = 'width', 'height', 'kind', 'n', 'data', 'source'
+    
     @staticmethod
     def open(path):
         with open(path, 'rb') as f:
-            data = f.read()
-            if png.valid(data):
-                source = png(data)
-            elif jpeg.valid(data):
+            data = bytearray(f.read()) # TODO python 3: bytearray -> bytes
+            if jpeg.valid(data):
                 source = jpeg(data)
+                rotation = source.rotation
+            elif png.valid(data):
+                source = png(data)
+                rotation = 0
             else:
-                raise AssertionError('Unsupported image format.')
-            return image(source.width, source.height, source.kind, source)
+                raise ValueError('Unsupported image format.')
+            i = image(0, 0, source.kind)
+            if rotation == 90 or rotation == 270:
+                i.width, i.height = source.height, source.width
+            else:
+                i.width, i.height = source.width, source.height
+            i.source = source
+            return i
     
-    @staticmethod
-    def merge(kind, *images):
-        if not images:
-            return None
-        a = image(images[0].width, images[0].height, kind)
-        i = 0
-        for b in images:
-            assert a.height == b.height and \
-                a.width == b.width, 'Invalid image dimensions.'
-            for j in range(b.count):
-                for y in range(b.height):
-                    a.rows[y][i::a.count] = b.rows[y][j::b.count]
-                i += 1
-        assert i == a.count, 'Invalid channels count.'
-        return a
-    
-    def __init__(self, width, height, kind='rgb', source=None):
-        assert kind in ('g','ga','rgb','rgba','cmyk'), 'Invalid image kind.'
+    def __init__(self, width, height, kind='rgb'):
         self.width, self.height = width, height
+        if kind == 'g':
+            self.n = 1
+        elif kind == 'ga':
+            self.n = 2
+        elif kind == 'rgb':
+            self.n = 3
+        elif kind == 'rgba' or kind == 'cmyk':
+            self.n = 4
+        else:
+            raise ValueError('Invalid image kind.')
         self.kind = kind
-        self.count = \
-            1 if kind == 'g' else \
-            2 if kind == 'ga' else \
-            3 if kind == 'rgb' else 4
-        self.source = source
-        self.properties = record(
-            background = (255,) * (self.count - 1) + \
-                (0 if kind in ('ga', 'rgba') else 255,))
-    
-    @lazy
-    def rows(self):
-        if self.source:
-            return self.source.decompress()
-        template = bytearray(self.width * self.properties.background)
-        return [template[:] for i in range(self.height)]
-    
-    def touch(self):
+        self.data = bytearray(width*height*self.n)
         self.source = None
-        return self
     
-    def background(self, *values):
-        self.properties.background = values
-        return self
+    def __eq__(self, other):
+        self.decompress(); other.decompress()
+        return self.width == other.width and self.height == other.height and \
+            self.kind == other.kind and self.data == other.data
     
-    def equal(self, other):
-        return self.kind == other.kind and self.rows == other.rows
-    
-    def clear(self):
-        try:
-            delattr(self, 'rows')
-        except AttributeError:
-            pass
-        return self.touch()
+    def __ne__(self, other):
+        return not self == other
     
     def copy(self):
-        return deepcopy(self)
+        i = image(0, 0, self.kind)
+        i.width, i.height = self.width, self.height
+        i.data[:], i.source = self.data, self.source
+        return i
     
-    def split(self):
-        others = []
-        for i in range(self.count):
-            other = image(self.width, self.height, 'g')
-            other.rows = [row[i::self.count] for row in self.rows]
-            others.append(other)
-        return others
+    def decompress(self):
+        if self.source:
+            source, self.source = self.source, None
+            self.data[:] = source.decompress()
+            if isinstance(source, jpeg):
+                rotation = source.rotation
+                if rotation == 90 or rotation == 270:
+                    self.width, self.height = self.height, self.width
+                    self.rotate(rotation == 90)
+                elif rotation == 180:
+                    self.flip(True, True)
+        return self
     
     def get(self, x, y):
-        offset = x * self.count
-        return tuple(self.rows[y][offset:offset+self.count])
+        self.decompress()
+        n = self.n
+        i = (x + y*self.width)*n
+        return tuple(self.data[i:i + n])
     
-    def put(self, x, y, *values):
-        row = self.rows[y]
-        for offset, value in enumerate(values, x * self.count):
-            row[offset] = value
-        return self.touch()
+    def put(self, x, y, components):
+        self.decompress()
+        n, data = self.n, self.data
+        if n != len(components):
+            raise ValueError('Different component count.')
+        i, j = (x + y*self.width)*n, 0
+        while n > 0:
+            data[i] = components[j]
+            i += 1
+            j += 1
+            n -= 1
+        return self
     
-    def fill(self, *values):
-        return self.background(*values).clear()
+    def fill(self, components):
+        self.decompress()
+        n, data = self.n, self.data
+        if n != len(components):
+            raise ValueError('Different component count.')
+        for i in range(self.width*self.height*n):
+            data[i] = components[i%n]
+        return self
     
-    def blit(self, other, sx=0, sy=0, ox=0, oy=0, width=0, height=0):
-        assert self.kind == other.kind, 'Different image kind.'
-        width = max(0, min(self.width-sx, (width or other.width)-ox))
-        height = max(0, min(self.height-sy, (height or other.height)-ox))
-        sx *= self.count
-        ox *= self.count
-        width *= self.count
-        for i in range(height):
-            self.rows[i+sy][sx:sx+width] = other.rows[i+oy][ox:ox+width]
-        return self.touch() if width!=0 and height!=0 else self
+    def white(self):
+        self.decompress()
+        kind, data = self.kind, self.data
+        for i in range(0, self.width*self.height*self.n, self.n):
+            if kind == 'g':
+                data[i] = 255
+            elif kind == 'ga':
+                data[i] = 255
+                data[i+1] = 0
+            elif kind == 'rgb':
+                data[i] = data[i+1] = data[i+2] = 255
+            elif kind == 'rgba':
+                data[i] = data[i+1] = data[i+2] = 255
+                data[i+3] = 0
+            else: # cmyk
+                data[i] = data[i+1] = data[i+2] = data[i+3] = 0
+        return self
     
-    def cropped(self, x, y, width, height):
-        other = image(width, height, self.kind)
-        other.properties.update(self.properties)
-        other.blit(self, 0, 0, x, y, width, height)
-        return other
+    def black(self):
+        self.decompress()
+        kind, data = self.kind, self.data
+        for i in range(0, self.width*self.height*self.n, self.n):
+            if kind == 'g':
+                data[i] = 0
+            elif kind == 'ga':
+                data[i] = data[i+1] = 0
+            elif kind == 'rgb':
+                data[i] = data[i+1] = data[i+2] = 0
+            elif kind == 'rgba':
+                data[i] = data[i+1] = data[i+2] = data[i+3] = 0
+            else: # cmyk
+                data[i] = data[i+1] = data[i+2] = 0
+                data[i+3] = 255
+        return self
+    
+    def blit(self, x, y, source):
+        self.decompress()
+        if self.kind != source.kind:
+            raise ValueError('Different image kind.')
+        w, h, n = self.width, self.height, self.n
+        width = max(0, min(w, w - x, source.width, source.width + x))
+        height = max(0, min(h, h - y, source.height, source.height + y))
+        r = range(height)
+        if y > 0 and self.data is source.data:
+            r = reversed(r)
+        for k in r:
+            i = (max(0, x) + (max(0, y) + k)*w)*n
+            j = (max(0, -x) + (max(0, -y) + k)*source.width)*n
+            self.data[i:i + width*n] = source.data[j:j + width*n]
+        return self
     
     def crop(self, x, y, width, height):
-        other = self.cropped(x, y, width, height)
+        self.decompress()
+        w, h, n = self.width, self.height, self.n
+        width = max(0, min(w, w - x, width, width + x))
+        height = max(0, min(h, h - y, height, height + y))
+        if w != width:
+            for k in range(height):
+                i = (0 + (0 + k)*width)*n
+                j = (max(0, x) + (max(0, y) + k)*w)*n
+                self.data[i:i + width*n] = self.data[j:j + width*n]
+        self.data[width*height*n:] = []
         self.width, self.height = width, height
-        self.rows[:] = other.rows
-        return self.touch()
+        return self
     
     def flip(self, horizontal, vertical):
-        if horizontal:
-            n = self.count
-            for row in self.rows:
-                r = row[::-1]
-                for i in range(n):
-                    row[i::n] = r[n-i-1::n]
-        if vertical:
-            self.rows.reverse()
-        return self.touch() if horizontal or vertical else self
+        self.decompress()
+        w, h, n, data = self.width, self.height, self.n, self.data
+        if horizontal and vertical:
+            for y in range(h//2):
+                for x in range(w):
+                    i = (x + y*w)*n
+                    j = ((w - x - 1) + (h - y - 1)*w)*n
+                    k = n
+                    while k > 0:
+                        data[i], data[j] = data[j], data[i]
+                        i += 1
+                        j += 1
+                        k -= 1
+            if h%2 == 1:
+                m = h//2
+                for x in range(w//2):
+                    i = (x + m*w)*n
+                    j = ((w - x - 1) + m*w)*n
+                    k = n
+                    while k > 0:
+                        data[i], data[j] = data[j], data[i]
+                        i += 1
+                        j += 1
+                        k -= 1
+        elif horizontal:
+            for y in range(h):
+                for x in range(w//2):
+                    i = (x + y*w)*n
+                    j = ((w - x - 1) + y*w)*n
+                    k = n
+                    while k > 0:
+                        data[i], data[j] = data[j], data[i]
+                        i += 1
+                        j += 1
+                        k -= 1
+        elif vertical:
+            for y in range(h//2):
+                for x in range(w):
+                    i = (x + y*w)*n
+                    j = (x + (h - y - 1)*w)*n
+                    k = n
+                    while k > 0:
+                        data[i], data[j] = data[j], data[i]
+                        i += 1
+                        j += 1
+                        k -= 1
+        return self
+    
+    def transpose(self):
+        self.decompress()
+        w, h, n, data = self.width, self.height, self.n, self.data
+        if w == h:
+            for y in range(h - 1):
+                for x in range(y + 1, w):
+                    i = (x + y*w)*n
+                    j = (y + x*h)*n
+                    k = n
+                    while k > 0:
+                        data[i], data[j] = data[j], data[i]
+                        i += 1
+                        j += 1
+                        k -= 1
+            return self
+        result = bytearray(w*h*n)
+        for y in range(h):
+            for x in range(w):
+                i = (x + y*w)*n
+                j = (y + x*h)*n
+                k = n
+                while k > 0:
+                    result[j] = data[i]
+                    i += 1
+                    j += 1
+                    k -= 1
+        self.width, self.height = h, w
+        self.data[:] = result
+        return self
     
     def rotate(self, clockwise):
-        self.width, self.height = self.height, self.width
-        n = self.count
-        rows = [bytearray(self.width * n) for i in range(self.height)]
-        transpose = izip(*(reversed(self.rows) if clockwise else self.rows))
-        for row in (rows if clockwise else reversed(rows)):
-            for i in range(n):
-                row[i::n] = next(transpose)
-        self.rows[:] = rows
-        return self.touch()
-    
-    def resized(self, width=0, height=0, interpolation='bicubic'):
-        # Based on "General Filtered Image Rescaling"
-        # by Dale Schumacher in Graphics Gems 3, p. 8-16, 1992
-        
-        if interpolation == 'nearest':
-            kernel, size = _nearest, 0.5
-        elif interpolation == 'bicubic':
-            kernel, size = _bicubic, 2.0
-        elif interpolation == 'lanczos':
-            kernel, size = _lanczos, 3.0
-        else:
-            raise AssertionError('Invalid interpolation.')
-        
-        if width == self.width and height == self.height:
+        self.decompress()
+        w, h, n, data = self.width, self.height, self.n, self.data
+        if w == h:
+            for y in range(h//2):
+                for x in range(y, w - y - 1):
+                    i = (x + y*w)*n
+                    j = ((w - y - 1) + x*w)*n
+                    k = ((w - x - 1) + (h - y - 1)*w)*n
+                    l = (y + (h - x - 1)*w)*n
+                    m = n
+                    while m > 0:
+                        t = data[i]
+                        if clockwise:
+                            data[i] = data[l]
+                            data[l] = data[k]
+                            data[k] = data[j]
+                            data[j] = t
+                        else:
+                            data[i] = data[j]
+                            data[j] = data[k]
+                            data[k] = data[l]
+                            data[l] = t
+                        i += 1
+                        j += 1
+                        k += 1
+                        l += 1
+                        m -= 1
             return self
-        if width == height == 0:
-            return self
-        if width == 0:
-            width = (height * self.width) // self.height
-        elif height == 0:
-            height = (width * self.height) // self.width
-        
-        n = self.count
-        
-        h = _contributions(self.width, width, kernel, size, n)
-        v = _contributions(self.height, height, kernel, size, 1)
-        
-        skipx = (width + self.width) // (self.width * 2)
-        skipy = (height + self.height) // (self.height * 2)
-        
-        inter = image(width, self.height, self.kind)
-        for iy, sy in zip(inter.rows, self.rows):
-            for x in range(skipx, width - skipx):
-                for i in range(n):
-                    p = 0
-                    for pixel, weight in h[x]:
-                        p += sy[pixel + i] * weight
-                    iy[x * n + i] = clamp((p + (1 << 51)) >> 52)
-        
-        if skipx > 0:
-            for iy, sy in zip(inter.rows, self.rows):
-                iy[:skipx * n] = sy[:n] * skipx
-                iy[-skipx * n:] = sy[-n:] * skipx
-        
-        final = image(width, height, self.kind)
-        ir = inter.rows
-        for y in range(skipy, height - skipy):
-            vy, fy = v[y], final.rows[y]
-            for x in range(0, width * n, n):
-                for i in range(n):
-                    p = 0
-                    for pixel, weight in vy:
-                        p += ir[pixel][x + i] * weight
-                    fy[x + i] = clamp((p + (1 << 51)) >> 52)
-        
-        for i in range(skipy):
-            final.rows[i][:] = inter.rows[0]
-            final.rows[-i - 1][:] = inter.rows[-1]
-        
-        return final
+        result = bytearray(w*h*n)
+        for y in range(h):
+            for x in range(w):
+                i = (x + y*w)*n
+                if clockwise:
+                    j = (h - y - 1 + x*h)*n
+                else:
+                    j = (y + (w - x - 1)*h)*n
+                k = n
+                while k > 0:
+                    result[j] = data[i]
+                    i += 1
+                    j += 1
+                    k -= 1
+        self.width, self.height = h, w
+        self.data[:] = result
+        return self
     
     def resize(self, width=0, height=0, interpolation='bicubic'):
-        other = self.resized(width, height, interpolation)
-        self.rows[:] = other.rows
-        self.width, self.height = other.width, other.height
-        return self.touch()
+        self.decompress()
+        if interpolation == 'nearest':
+            kernel, support = nearest_kernel, 0.5
+        elif interpolation == 'bicubic':
+            kernel, support = _bicubic_kernel, 2.0
+        elif interpolation == 'lanczos':
+            kernel, support = _lanczos_kernel, 5.0
+        else:
+            raise ValueError('Invalid interpolation.')
+        w, h, n, data = self.width, self.height, self.n, self.data
+        if width == w and height == h:
+            return self
+        if width == 0 and height == 0:
+            return self
+        if width == 0:
+            width = max(1, (height*w)//h)
+        elif height == 0:
+            height = max(1, (width*h)//w)
+        result = bytearray(width*height*n)
+        column = [0.0]*h
+        sx, sy = w/width, h/height
+        ycontributions = [_kernel_contribution(y, sy, h, kernel, support)
+            for y in range(height)]
+        for x in range(width):
+            index, xweights = _kernel_contribution(x, sx, w, kernel, support)
+            for component in range(n):
+                for y in range(h):
+                    c = 0.0
+                    i = (index + y*w)*n + component
+                    for weight in xweights:
+                        c += data[i]*weight
+                        i += n
+                    column[y] = c
+                for y in range(height):
+                    c = 0.0
+                    i, yweights = ycontributions[y]
+                    for weight in yweights:
+                        c += column[i]*weight
+                        i += 1
+                    if c < 0.5:
+                        value = 0
+                    elif c >= 254.5:
+                        value = 255
+                    else:
+                        value = int(c + 0.5)
+                    i = (x + y*width)*n + component
+                    result[i] = value
+        self.width, self.height = width, height
+        self.data[:] = result
+        return self
     
-    def scale(self, factor, interpolation='bicubic'):
-        return self.resize(
-            int(round(self.width * factor)),
-            int(round(self.height * factor)), interpolation)
+    def rescale(self, factor, interpolation='bicubic'):
+        w, h = int(self.width*factor+0.5), int(self.height*factor+0.5)
+        return self.resize(w, h, interpolation)
     
     def blur(self, radius):
-        
-        kernel = pascal(radius * 2)
-        
-        n = self.count
-        boundx, boundy = self.width*n-1, self.height-1
-        
-        inter = image(self.width, self.height, self.kind)
-        for iy, sy in zip(inter.rows, self.rows):
-            for x in range(0, self.width*n, n):
-                for i in range(n):
-                    total, divisor = 0, 0
-                    for offset, weight in enumerate(kernel, -radius):
-                        xx = x + i + offset * n
-                        if 0 <= xx <= boundx:
-                            total += sy[xx] * weight
-                            divisor += weight
-                    iy[x + i] = (total + divisor//2) // divisor
-        
-        ir = inter.rows
-        for y in range(self.height):
-            sy = self.rows[y]
-            for x in range(0, self.width*n, n):
-                for i in range(n):
-                    total, divisor = 0, 0
-                    for offset, weight in enumerate(kernel, -radius):
-                        yy = y + offset
-                        if 0 <= yy <= boundy:
-                            total += ir[yy][x + i] * weight
-                            divisor += weight
-                    sy[x + i] = (total + divisor//2) // divisor
-        
-        return self.touch()
+        self.decompress()
+        kernel = [1]*(radius*2 + 1)
+        for k in range(radius*2 - 1):
+            kernel[k + 1] = kernel[k]*(radius*2 - k)//(k + 1)
+        w, h, n, data = self.width, self.height, self.n, self.data
+        separation = bytearray(w*h*n)
+        for y in range(h):
+            for x in range(w):
+                for component in range(n):
+                    offset = -radius
+                    value = total = 0
+                    for weight in kernel:
+                        if 0 <= x + offset < w:
+                            i = (x + offset + y*w)*n + component
+                            value += data[i]*weight
+                            total += weight
+                        offset += 1
+                    i = (y + x*h)*n + component
+                    separation[i] = (value + total//2)//total
+        for x in range(w):
+            for y in range(h):
+                for component in range(n):
+                    offset = -radius
+                    value = total = 0
+                    for weight in kernel:
+                        if 0 <= y + offset < h:
+                            i = (y + offset + x*h)*n + component
+                            value += separation[i]*weight
+                            total += weight
+                        offset += 1
+                    i = (x + y*w)*n + component
+                    data[i] = (value + total//2)//total
+        return self
     
     def dither(self, levels=2):
-        # Error diffusion dithering weights by Daniel Burkes, 1988
-        
-        assert self.kind == 'g', 'Invalid image kind.'
-        assert 1 < levels < 257, 'Invalid levels count.'
-        
-        index = [0] * 256
-        starts = staircase(256, levels)
-        shades = staircase(255, levels - 1)
-        for j in range(levels - 1):
-            for i in range(starts[j], starts[j+1]):
-                index[i] = shades[j]
-        
-        below0, below1 = [0] * (self.width+4), [0] * (self.width+4)
-        for row in self.rows:
-            ahead0, ahead1, below1[2], below1[3] = 0, 0, 0, 0
-            for x in range(self.width):
-                old = row[x] + (ahead0 + below0[x+2] + 16) // 32
-                new = index[clamp(old)]
-                row[x] = new
+        self.decompress()
+        # Error diffusion dithering weights by Burkes, D. (1988).
+        if self.kind != 'g':
+            raise ValueError('Invalid image kind.')
+        if levels < 2 or levels > 256:
+            raise ValueError('Invalid levels count.')
+        w, h, data = self.width, self.height, self.data
+        cache = [255*(i*levels//256)//(levels - 1) for i in range(256)]
+        errors = [0]*(w + 4)
+        for y in range(h):
+            error1, error2 = errors[2], errors[3]
+            errors[2] = errors[3] = 0
+            for x in range(w):
+                i = x + y*w
+                old = data[i] + (error1 + 16)//32
+                new = data[i] = cache[max(0, min(old, 255))]
                 error = old - new
-                ahead0 = 8 * error + ahead1
-                ahead1 = 4 * error
-                below1[x] += 2 * error
-                below1[x+1] += 4 * error
-                below1[x+2] += 8 * error
-                below1[x+3] += 4 * error
-                below1[x+4] = 2 * error
-            below0, below1 = below1, below0
-        
-        return self.touch()
+                error1 = 8*error + error2
+                error2 = 4*error + errors[x + 4]
+                errors[x] += 2*error
+                errors[x + 1] += 4*error
+                errors[x + 2] += 8*error
+                errors[x + 3] += 4*error
+                errors[x + 4] = 2*error
+        return self
+    
+    def gamma(self, value):
+        self.decompress()
+        data = self.data
+        cache = [int((i/255.0)**value*255.0 + 0.5) for i in range(256)]
+        for i in range(self.width*self.height*self.n):
+            data[i] = cache[data[i]]
+        return self
     
     def invert(self):
-        for row in self.rows:
-            for x in range(self.width * self.count):
-                row[x] ^= 255
-        return self.touch()
+        self.decompress()
+        data = self.data
+        for i in range(self.width*self.height*self.n):
+            data[i] ^= 255
+        return self
+    
+    def jpeg(self, path='', quality=95):
+        if isinstance(self.source, jpeg):
+            return save(path, self.source.readable.data)
+        self.decompress()
+        data = jpegserialize(self, quality)
+        return save(path, data)
     
     def png(self, path='', optimized=False):
-        if type(self.source) == png:
-            data = self.source.data
-        else:
-            data = png.dump(self, optimized)
+        if isinstance(self.source, png):
+            return save(path, self.source.readable.data)
+        self.decompress()
+        data = pngserialize(self, optimized)
         return save(path, data)
     
-    def jpeg(self, path='', quality=90):
-        if type(self.source) == jpeg:
-            data = self.source.data
-        else:
-            data = jpeg.dump(self, quality)
-        return save(path, data)
-    
-    def placed(self, scale):
-        return placedimage(self, scale)
+    def placed(self, k):
+        return placedimage(self, k)
 
 
 
 
 class placedimage(object):
+    
+    __slots__ = 'item', 'k', 'x', 'y', 'width', 'height'
     
     def __init__(self, item, k):
         self.item = item
@@ -378,32 +515,40 @@ class placedimage(object):
     def fitwidth(self, width):
         image = self.item
         self.width, self.height = \
-            width*self.k, width*image.height/float(image.width)*self.k # TODO python 3: remove float()
+            width*self.k, width*image.height/image.width*self.k
         return self
     
     def fitheight(self, height):
         image = self.item
         self.width, self.height = \
-            height*image.width/float(image.height)*self.k, height*self.k # TODO python 3: remove float()
+            height*image.width/image.height*self.k, height*self.k
         return self
     
-    def pdf(self, previous, resources, colors, fonts, images, states, height):
+    def pdf(self, height, state, resources):
+        x, y = self.x, height-self.y-self.height
+        w, h = self.width, self.height
+        a, b, c, d, e, f = w, 0, 0, h, x, y
+        if isinstance(self.item.source, jpeg):
+            rotation = self.item.source.rotation
+            if rotation == 90:
+                a, b, c, d, e, f = 0, -h, w, 0, x, y+h
+            elif rotation == 180:
+                a, b, c, d, e, f = -w, 0, 0, -h, x+w, y+h
+            elif rotation == 270:
+                a, b, c, d, e, f = 0, h, -w, 0, x+w, y
         resource = resources.image(self.item)
-        images.add(resource)
-        return 'q %s 0 0 %s %s %s cm /%s Do Q' % (
-            dump(self.width), dump(self.height),
-            dump(self.x), dump(height-self.y-self.height),
+        return 'q %s %s %s %s %s %s cm /%s Do Q' % (
+            dump(a), dump(b), dump(c), dump(d), dump(e), dump(f),
             resource.name)
     
     def svg(self):
         image = self.item
-        if self.width < self.height:
-            a, b = self.width*image.height/float(image.width), self.height # TODO python 3: remove float()
+        if similar(self.width, self.height*(image.width/image.height)):
+            ratio = ''
         else:
-            a, b = self.width, self.height*image.width/float(image.height) # TODO python 3: remove float()
-        ratio = '' if equal(a, b) else ' preserveAspectRatio="none"'
-        if type(image.source) == png:
-            mime, data = 'image/png', image.source.data
+            ratio = ' preserveAspectRatio="none"'
+        if isinstance(image.source, png):
+            mime, data = 'image/png', image.source.readable.data
         else:
             mime, data = 'image/jpeg', image.jpeg()
         return (
@@ -414,45 +559,46 @@ class placedimage(object):
                 mime, b64encode(data))
     
     def rasterize(self, rasterizer, k, x, y):
-        other = self.item.resized(
-            int(self.width * k + 0.5), int(self.height * k + 0.5))
-        rasterizer.image.blit(other,
-            int(self.x * k + x + 0.5), int(self.y * k + y + 0.5))
+        x, y = int(round(self.x*k + x)), int(round(self.y*k + y))
+        w, h = int(self.width*k + 0.5), int(self.height*k + 0.5)
+        source = self.item.copy().resize(w, h)
+        rasterizer.image.blit(x, y, source)
 
 
 
 
 class raw(object):
     
-    def __init__(self, width, height, rows=None):
+    def __init__(self, width, height):
         self.width, self.height = width, height
-        if rows is None:
-            rows = [[0.0] * width * 3 for i in range(height)]
-        self.rows = rows
+        self.data = [0.0]*width*height*3
     
     def put(self, x, y, r, g, b):
-        offset = x * 3
-        row = self.rows[y]
-        row[offset], row[offset+1], row[offset+2] = r, g, b
+        data = self.data
+        i = (x + y*self.width)*3
+        data[i], data[i+1], data[i+2] = r, g, b
+        return self
 
     def tonemapped(self, key=0.18, white=1.0):
-        # Based on "Photographic Tone Reproduction for Digital Images"
-        # by Erik Reinhard, Michael Stark, Peter Shirley and James Ferwerda, 2002
-        
-        w, h = self.width, self.height
-        average = exp(sum(log(
-            max(0.0001, r[x]*0.212671 + r[x+1]*0.71516 + r[x+2]*0.072169))
-                for r in self.rows for x in range(0, w*3, 3)) / (w*h))
-        scale = key / average
-        iwhite2 = 1.0 / (white * white)
-        
+        # Ref.: Reinhard, E., Stark, M., Shirley, P., Ferwerda, J. (2002).
+        # Photographic Tone Reproduction for Digital Images.
+        w, h, data = self.width, self.height, self.data
+        total = 0.0
+        for i in range(0, w*h*3, 3):
+            r, g, b = data[i], data[i+1], data[i+2]
+            l = r*0.212671 + g*0.71516 + b*0.072169
+            total += log(max(1e-10, l))
+        average = exp(total/(w*h))
+        scale = key/average
+        iwhite2 = 1.0/(white*white)
         other = image(w, h, 'rgb')
-        for s, o in zip(self.rows, other.rows):
-            for x in range(0, w*3, 3):
-                l = scale * (s[x]*0.212671 + s[x+1]*0.71516 + s[x+2]*0.072169)
-                d = scale * (1.0 + l * iwhite2) / (1.0 + l)
-                for i in range(x, x+3):
-                    o[i] = min(int((s[i] * d) ** 0.45 * 255.0 + 0.5), 255)
+        otherdata = other.data
+        for i in range(0, w*h*3, 3):
+            r, g, b = data[i], data[i+1], data[i+2]
+            l = scale*(r*0.212671 + g*0.71516 + b*0.072169)
+            d = scale*(1.0 + l*iwhite2)/(1.0 + l)
+            for j in range(i, i + 3):
+                otherdata[j] = min(int((data[j]*d)**0.45*255.0 + 0.5), 255)
         return other
 
 

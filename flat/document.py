@@ -1,22 +1,25 @@
-
-from weakref import proxy
-
+from __future__ import division
+from .misc import save, scale
+from .pdf import serialize as pdfserialize
 from .rasterizer import rasterizer
-from .utils import save, scale
-from . import pdfwriter
-from . import svgwriter
+from .svg import serialize as svgserialize
 
 
 
 
 class page(object):
     
+    __slots__ = 'title', 'k', 'width', 'height', 'items'
+    
     def __init__(self, document):
-        self.document = proxy(document)
+        self.title = document.title
         self.k = document.k
         self.width, self.height = document.width, document.height
         self.items = []
-        self.append = self.items.append
+    
+    def meta(self, title):
+        self.title = title
+        return self
     
     def size(self, width, height, units='mm'):
         self.k = scale(units)
@@ -24,24 +27,23 @@ class page(object):
         return self
     
     def place(self, item):
-        placed = item.placed(self.k)
-        self.append(placed)
-        return placed
+        entity = item.placed(self.k)
+        self.items.append(entity)
+        return entity
     
-    def chain(self, item):
-        chained = item.chained(self.k)
-        self.append(chained)
-        return chained
+    def chain(self, block):
+        block = block.chained(self.k)
+        self.items.append(block)
+        return block
     
     def svg(self, path='', compress=False):
-        data = svgwriter.dump(self)
+        data = svgserialize(self, compress)
         return save(path, data)
     
-    def image(self, ppi=72, kind='g', samples=32):
-        k = ppi / 72.0
-        r = rasterizer(
-            int(self.width * k + 0.5),
-            int(self.height * k + 0.5), kind, samples)
+    def image(self, ppi=72, kind='g'):
+        k = ppi/72.0
+        w, h = int(self.width*k + 0.5), int(self.height*k + 0.5)
+        r = rasterizer(w, h, kind)
         for item in self.items:
             item.rasterize(r, k, 0.0, 0.0)
         return r.image
@@ -51,15 +53,15 @@ class page(object):
 
 class document(object):
     
+    __slots__ = 'title', 'k', 'width', 'height', 'pages'
+    
     @staticmethod
     def open(path):
         raise NotImplementedError
     
-    def __init__(self, width=210, height=297, units='mm'):
-        self.title = 'Untitled'
-        self.k = scale(units)
-        self.width, self.height = width*self.k, height*self.k
-        self.bleed, self.cropmarks = False, False
+    def __init__(self, width=210.0, height=297.0, units='mm'):
+        self.meta('Untitled')
+        self.size(width, height, units)
         self.pages = []
     
     def meta(self, title):
@@ -76,11 +78,8 @@ class document(object):
         self.pages.append(p)
         return p
     
-    def page(self, index):
-        return self.pages[index]
-    
-    def pdf(self, path='', compress=False):
-        data = pdfwriter.dump(self)
+    def pdf(self, path='', compress=False, bleed=False, cropmarks=False):
+        data = pdfserialize(self, compress, bleed, cropmarks)
         return save(path, data)
 
 

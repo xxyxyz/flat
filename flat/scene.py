@@ -1,10 +1,9 @@
-
+from __future__ import division
 from itertools import imap # TODO python 3: imap -> map
 from math import cos, pi, sin, sqrt
 from multiprocessing import Pool
 from random import choice, random
 from time import time
-
 from .image import raw
 
 
@@ -74,7 +73,7 @@ def _vector_length2(a):
 
 def _vector_unit(a):
     x, y, z = a
-    factor = 1.0 / sqrt(x*x + y*y + z*z)
+    factor = 1.0/sqrt(x*x + y*y + z*z)
     return x*factor, y*factor, z*factor
 
 def _vector_dot(a, b):
@@ -104,44 +103,43 @@ class triangle(object):
         self.normal = _vector_unit(_vector_cross(u, v))
         self.tangent = _vector_unit(u)
         self.leg = _vector_cross(self.normal, self.tangent)
-        self.area = _vector_length(_vector_cross(u, v)) * 0.5
+        self.area = _vector_length(_vector_cross(u, v))*0.5
         self.material = material
     
     def intersect(self, origin, direction):
-        # Based on "Fast, Minimum Storage Ray/Triangle Intersection"
-        # by Tomas Moller and Ben Trumbore, 1997
-        
+        # Ref.: Moller, T., Trumbore, B. (1997).
+        # Fast, Minimum Storage Ray/Triangle Intersection.
         ox, oy, oz = origin
         dx, dy, dz = direction
-        px = dy * self.vz - dz * self.vy
-        py = dz * self.vx - dx * self.vz
-        pz = dx * self.vy - dy * self.vx
-        det = self.ux * px + self.uy * py + self.uz * pz
+        px = dy*self.vz - dz*self.vy
+        py = dz*self.vx - dx*self.vz
+        pz = dx*self.vy - dy*self.vx
+        det = self.ux*px + self.uy*py + self.uz*pz
         if det == 0.0:
             return -1.0
-        inv_det = 1.0 / det
+        inv_det = 1.0/det
         tx = ox - self.ax
         ty = oy - self.ay
         tz = oz - self.az
-        u = (tx * px + ty * py + tz * pz) * inv_det
+        u = (tx*px + ty*py + tz*pz)*inv_det
         if u < 0.0 or u > 1.0:
             return -1.0
-        qx = ty * self.uz - tz * self.uy
-        qy = tz * self.ux - tx * self.uz
-        qz = tx * self.uy - ty * self.ux
-        v = (dx * qx + dy * qy + dz * qz) * inv_det
+        qx = ty*self.uz - tz*self.uy
+        qy = tz*self.ux - tx*self.uz
+        qz = tx*self.uy - ty*self.ux
+        v = (dx*qx + dy*qy + dz*qz)*inv_det
         if v < 0.0 or u + v > 1.0:
             return -1.0
-        return (self.vx * qx + self.vy * qy + self.vz * qz) * inv_det
+        return (self.vx*qx + self.vy*qy + self.vz*qz)*inv_det
     
     def sample(self):
         r = sqrt(random())
         u = 1.0 - r
-        v = random() * r
+        v = random()*r
         return (
-            self.ax + self.ux * u + self.vx * v,
-            self.ay + self.uy * u + self.vy * v,
-            self.az + self.uz * u + self.vz * v)
+            self.ax + self.ux*u + self.vx*v,
+            self.ay + self.uy*u + self.vy*v,
+            self.az + self.uz*u + self.vz*v)
     
     def bbox(self):
         x, y, z = zip(self.a, self.b, self.c)
@@ -182,28 +180,27 @@ class bbox(object):
     
     def centroid(self):
         return (
-            (self.minx + self.maxx) * 0.5,
-            (self.miny + self.maxy) * 0.5,
-            (self.minz + self.maxz) * 0.5)
+            (self.minx + self.maxx)*0.5,
+            (self.miny + self.maxy)*0.5,
+            (self.minz + self.maxz)*0.5)
     
     def intersect(self, origin, inverse, minimum):
-        # Based on "An Efficient and Robust Ray-Box Intersection Algorithm"
-        # by Amy Williams, Steve Barrus, R. Keith Morley, Peter Shirley, 2003
-        
+        # Ref.: Williams, A., Barrus, S., Morley, R. K., Shirley, P. (2003).
+        # An Efficient and Robust Ray-Box Intersection Algorithm.
         ox, oy, oz = origin
         ix, iy, iz = inverse
         if ix >= 0:
-            tmin = (self.minx - ox) * ix
-            tmax = (self.maxx - ox) * ix
+            tmin = (self.minx - ox)*ix
+            tmax = (self.maxx - ox)*ix
         else:
-            tmin = (self.maxx - ox) * ix
-            tmax = (self.minx - ox) * ix
+            tmin = (self.maxx - ox)*ix
+            tmax = (self.minx - ox)*ix
         if iy >= 0:
-            tymin = (self.miny - oy) * iy
-            tymax = (self.maxy - oy) * iy
+            tymin = (self.miny - oy)*iy
+            tymax = (self.maxy - oy)*iy
         else:
-            tymin = (self.maxy - oy) * iy
-            tymax = (self.miny - oy) * iy
+            tymin = (self.maxy - oy)*iy
+            tymax = (self.miny - oy)*iy
         if tmin > tymax or tymin > tmax:
             return False
         if tymin > tmin:
@@ -211,11 +208,11 @@ class bbox(object):
         if tymax < tmax:
             tmax = tymax
         if iz >= 0:
-            tzmin = (self.minz - oz) * iz
-            tzmax = (self.maxz - oz) * iz
+            tzmin = (self.minz - oz)*iz
+            tzmax = (self.maxz - oz)*iz
         else:
-            tzmin = (self.maxz - oz) * iz
-            tzmax = (self.minz - oz) * iz
+            tzmin = (self.maxz - oz)*iz
+            tzmax = (self.minz - oz)*iz
         if tmin > tzmax or tzmin > tmax:
             return False
         if tzmin > tmin:
@@ -235,10 +232,10 @@ class diffuse(object):
         self.max = max(reflectance)
     
     def scatter(self, direction, tangent, leg, normal, u0, u1):
-        phi = 2.0 * pi * u0
+        phi = 2.0*pi*u0
         r = sqrt(u1)
-        x = r * cos(phi)
-        y = r * sin(phi)
+        x = r*cos(phi)
+        y = r*sin(phi)
         z = sqrt(1.0 - u1)
         if _vector_dot(normal, direction) > 0.0:
             return _vector_subsub(
@@ -262,7 +259,7 @@ def _bvh_build(items):
         for item in items:
             (left if item[2][axis] < center else right).append(item)
         if not left or not right:
-            half = len(items) // 2
+            half = len(items)//2
             left, right = items[:half], items[half:]
         return _bvh_build(left), _bvh_build(right), bounds, axis
     else:
@@ -275,7 +272,7 @@ class bvh(object):
         items = [(i, b, b.centroid()) for i, b in [
             (i, i.bbox()) for i in items]]
         self.tree = _bvh_build(items)
-        self.stack = [None] * 32
+        self.stack = [None]*32
     
     def intersect(self, origin, direction, previous):
         dx, dy, dz = direction
@@ -333,11 +330,11 @@ class scene(object):
         else:
             right = 1.0 if direction[1] < 0.0 else -1.0, 0.0, 0.0
         up = _vector_unit(_vector_cross(right, direction))
-        forward = _vector_scale(direction, self.length / 18.0) # 1 / tan((2 * atan(36 / (2 * length))) / 2)
+        forward = _vector_scale(direction, self.length/18.0) # 1/tan((2*atan(36/(2*length)))/2)
         return up, right, forward
     
     def clear(self):
-        del self.items[:] # TODO python 3: self.items.clear()
+        del self.items[:] # TODO python 3: list.clear()
     
     def add(self, mesh, material):
         self.items.append((mesh, material))
@@ -365,20 +362,24 @@ class scene(object):
             pool = Pool(initializer=_render_initializer, initargs=context)
             result = pool.imap(_pathtracing_row, range(height))
         else:
-            result = imap(_pathtracing_row, range(height), context * height)
+            result = imap(_pathtracing_row, range(height), context*height)
         rows = []
         step = 0
         for y, row in enumerate(result):
             rows.append(row)
             if info:
-                s = (y + 1) * 100 // height
+                s = (y + 1)*100//height
                 if s > step:
                     step = s
                     print('%d%%' % step)
         rows.reverse()
         if info:
             print('...done in %.2f seconds.' % (time() - start))
-        return raw(width, height, rows)
+        r = raw(width, height)
+        for y in range(height):
+            i = y*width*3
+            r.data[i:i+width*3] = rows[y]
+        return r
 
 
 
@@ -396,34 +397,33 @@ def _pathtracing_row(y, context=None):
         origin, up, right, forward, sky, skyground = context or _global_context
     intersect = accelerator.intersect
     count = len(emitters)
-    row = [0.0] * width * 3
-    ratio = 1.0 / max(width, height)
-    inv = 1.0 / samples
-    fix = 1.0 / (samples * samples)
+    row = [0.0]*width*3
+    ratio = 1.0/max(width, height)
+    inv = 1.0/samples
+    fix = 1.0/(samples*samples)
     for x in range(width):
         r, g, b = 0.0, 0.0, 0.0
         for j in range(samples):
             for i in range(samples):
-                dx = (2.0 * (x + random()) - width) * ratio
-                dy = (2.0 * (y + random()) - height) * ratio
+                dx = (2.0*(x + random()) - width)*ratio
+                dy = (2.0*(y + random()) - height)*ratio
                 direction = _vector_unit(_vector_addadd(
                     forward, _vector_scale(right, dx), _vector_scale(up, dy)))
-                u0 = (i + random()) * inv
-                u1 = (j + random()) * inv
+                u0 = (i + random())*inv
+                u1 = (j + random())*inv
                 color = _radiance(intersect, emitters, count, sky, skyground,
                     origin, direction, u0, u1)
                 r += color[0]
                 g += color[1]
                 b += color[2]
-        offset = x * 3
+        offset = x*3
         row[offset], row[offset+1], row[offset+2] = r*fix, g*fix, b*fix
     return row
 
 
 def _radiance(intersect, emitters, count, sky, skyground,
     origin, direction, u0, u1):
-    # Based on "MiniLight" by Harrison Ainsworth / HXA7241, 2008
-    
+    # Ref.: Ainsworth, H. / HXA7241. (2008). MiniLight.
     color = 0.0, 0.0, 0.0
     attenuation = 1.0, 1.0, 1.0
     previous = None
@@ -451,8 +451,8 @@ def _radiance(intersect, emitters, count, sky, skyground,
                         illumination = _vector_mulscale(
                             material.reflectance,
                             emitter.material.emittance,
-                            count * emitter.area * away * -into / (
-                                pi * _vector_length2(d)**2))
+                            count*emitter.area*away*-into/(
+                                pi*_vector_length2(d)**2))
                         color = _vector_addmul(color, illumination, attenuation)
         if random() > material.max:
             return color
@@ -461,7 +461,7 @@ def _radiance(intersect, emitters, count, sky, skyground,
             direction, item.tangent, item.leg, item.normal, u0, u1)
         u0, u1 = random(), random()
         attenuation = _vector_mulscale(
-            attenuation, material.reflectance, 1.0 / material.max)
+            attenuation, material.reflectance, 1.0/material.max)
         previous = item
 
 

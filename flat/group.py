@@ -1,31 +1,37 @@
-
-from .utils import dump, scale
+from __future__ import division
+from copy import copy
+from .misc import dump, scale
 
 
 
 
 class group(object):
     
-    __slots__ = 'items', 'k'
+    __slots__ = 'k', 'items'
     
     @staticmethod
     def open(path):
         raise NotImplementedError
     
     def __init__(self, units='mm'):
-        self.items = []
         self.k = scale(units)
+        self.items = []
     
     def units(self, units='mm'):
         self.k = scale(units)
     
     def place(self, item):
-        placed = item.placed(self.k)
-        self.items.append(placed)
-        return placed
+        entity = item.placed(self.k)
+        self.items.append(entity)
+        return entity
     
-    def placed(self, scale):
-        return placedgroup(self, scale)
+    def chain(self, block):
+        block = block.chained(self.k)
+        self.items.append(block)
+        return block
+    
+    def placed(self, k):
+        return placedgroup(self, k)
 
 
 
@@ -48,25 +54,21 @@ class placedgroup(object):
         self.factor = factor
         return self
     
-    def pdf(self, previous, resources, spaces, fonts, images, states, height):
-        dummy = previous.copy()
-        commands = '\n'.join([
-            item.pdf(
-                dummy,
-                resources,
-                spaces, fonts, images, states,
-                0.0) for item in self.item.items])
-        factor = dump(self.factor)
+    def pdf(self, height, state, resources):
+        dummy = copy(state)
+        code = '\n'.join(
+            item.pdf(0.0, dummy, resources) for item in self.item.items)
         return 'q %s 0 0 %s %s %s cm\n%s\nQ' % (
-            factor, factor, dump(self.x), dump(height-self.y),
-            commands)
+            dump(self.factor), dump(self.factor),
+            dump(self.x), dump(height-self.y),
+            code)
     
     def svg(self):
-        elements = '\n'.join([item.svg() for item in self.item.items])
-        factor = dump(self.factor)
+        code = '\n'.join(item.svg() for item in self.item.items)
         return '<g transform="matrix(%s, 0, 0, %s, %s, %s)">%s</g>' % (
-            factor, factor, dump(self.x), dump(self.y),
-            elements)
+            dump(self.factor), dump(self.factor),
+            dump(self.x), dump(self.y),
+            code)
     
     def rasterize(self, rasterizer, k, x, y):
         for item in self.item.items:

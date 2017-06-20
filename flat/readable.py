@@ -1,4 +1,4 @@
-
+from copy import copy
 from struct import calcsize, unpack_from
 
 
@@ -6,15 +6,23 @@ from struct import calcsize, unpack_from
 
 class readable(object):
     
+    __slots__ = 'data', 'position'
+    
     def __init__(self, data):
         self.data = data
         self.position = 0
+    
+    def clone(self):
+        return copy(self)
     
     def jump(self, position):
         self.position = position
     
     def skip(self, length):
         self.position += length
+    
+    def peek(self, prefix):
+        return self.data.startswith(prefix, self.position)
     
     def read(self, length):
         p = self.position
@@ -26,38 +34,50 @@ class readable(object):
         self.position += calcsize(fmt)
         return unpack_from(fmt, self.data, p)
     
-    def int8(self):
-        p = self.position
-        self.position += 1
-        temp = ord(self.data[p]) # TODO python 3: remove ord()
-        return temp - ((temp & (1 << 7)) << 1)
-    
     def uint8(self):
         p = self.position
         self.position += 1
-        return ord(self.data[p]) # TODO python 3: remove ord()
-    
-    def int16(self):
-        d, p = self.data, self.position
-        self.position += 2
-        temp = (ord(d[p]) << 8) + ord(d[p+1]) # TODO python 3: remove ord()
-        return temp - ((temp & (1 << 15)) << 1)
+        return self.data[p]
     
     def uint16(self):
         d, p = self.data, self.position
         self.position += 2
-        return (ord(d[p]) << 8) + ord(d[p+1]) # TODO python 3: remove ord()
-    
-    def int32(self):
-        d, p = self.data, self.position
-        self.position += 4
-        temp = (ord(d[p]) << 24) + (ord(d[p+1]) << 16) + (ord(d[p+2]) << 8) + ord(d[p+3]) # TODO python 3: remove ord()
-        return temp - ((temp & (1 << 31)) << 1)
+        return d[p] << 8 | d[p+1]
     
     def uint32(self):
         d, p = self.data, self.position
         self.position += 4
-        return (ord(d[p]) << 24) + (ord(d[p+1]) << 16) + (ord(d[p+2]) << 8) + ord(d[p+3]) # TODO python 3: remove ord()
+        return d[p] << 24 | d[p+1] << 16 | d[p+2] << 8 | d[p+3]
+    
+    def int8(self):
+        t = self.uint8()
+        return t - ((t & (1 << 7)) << 1)
+    
+    def int16(self):
+        t = self.uint16()
+        return t - ((t & (1 << 15)) << 1)
+    
+    def int32(self):
+        t = self.uint32()
+        return t - ((t & (1 << 31)) << 1)
+    
+    def uint16le(self):
+        d, p = self.data, self.position
+        self.position += 2
+        return d[p] | d[p+1] << 8
+    
+    def uint32le(self):
+        d, p = self.data, self.position
+        self.position += 4
+        return d[p] | d[p+1] << 8 | d[p+2] << 16 | d[p+3] << 24
+    
+    def int16le(self):
+        t = self.uint16le()
+        return t - ((t & (1 << 15)) << 1)
+    
+    def int32le(self):
+        t = self.uint32le()
+        return t - ((t & (1 << 31)) << 1)
 
 
 

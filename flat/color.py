@@ -1,7 +1,5 @@
-
-from copy import copy
-
-from .utils import dump
+from __future__ import division
+from .misc import dump
 
 
 
@@ -10,212 +8,203 @@ class gray(object):
     
     __slots__ = 'intensity',
     
-    kind = 'g'
-    
     def __init__(self, intensity):
         self.intensity = intensity
     
     def __ne__(self, other):
-        return type(other) != gray or self.intensity != other.intensity
-    
-    def pdf(self):
-        return dump(self.intensity / 255.0)
+        return not isinstance(other, gray) or \
+            self.intensity != other.intensity
     
     def pdfstroke(self):
-        return '%s G' % self.pdf()
+        return '%s G' % dump(self.intensity/255.0)
     
     def pdffill(self):
-        return '%s g' % self.pdf()
+        return '%s g' % dump(self.intensity/255.0)
     
     def svg(self):
         raise NotImplementedError('SVG does not support grayscale.')
-
+    
+    def rasterize(self, rasterizer):
+        if rasterizer.image.kind != 'g':
+            raise ValueError('Invalid color kind.')
+        rasterizer.rasterize(self.intensity)
 
 class ga(object):
     
-    __slots__ = 'intensities',
-    
-    kind = 'ga'
+    __slots__ = 'g', 'a'
     
     def __init__(self, g, a):
-        self.intensities = g, a
+        self.g, self.a = g, a
     
     def __ne__(self, other):
-        return type(other) != ga or self.intensities != other.intensities
-    
-    def pdf(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        return not isinstance(other, ga) or \
+            self.g != other.g or \
+            self.a != other.a
     
     def pdfstroke(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        raise NotImplementedError('PDF does not support grayscale + alpha.')
     
     def pdffill(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        raise NotImplementedError('PDF does not support grayscale + alpha.')
     
     def svg(self):
-        raise NotImplementedError('SVG does not support grayscale.')
-
+        raise NotImplementedError('SVG does not support grayscale + alpha.')
+    
+    def rasterize(self, rasterizer):
+        if rasterizer.image.kind != 'ga':
+            raise ValueError('Invalid color kind.')
+        rasterizer.rasterize(self.g, self.a)
 
 class rgb(object):
     
-    __slots__ = 'intensities',
-    
-    kind = 'rgb'
+    __slots__ = 'r', 'g', 'b'
     
     def __init__(self, r, g, b):
-        self.intensities = r, g, b
+        self.r, self.g, self.b = r, g, b
     
     def __ne__(self, other):
-        return type(other) != rgb or self.intensities != other.intensities
-    
-    def pdf(self):
-        return ' '.join(dump(i / 255.0) for i in self.intensities)
+        return not isinstance(other, rgb) or \
+            self.r != other.r or \
+            self.g != other.g or \
+            self.b != other.b
     
     def pdfstroke(self):
-        return '%s RG' % self.pdf()
+        return '%s %s %s RG' % (
+            dump(self.r/255.0),
+            dump(self.g/255.0),
+            dump(self.b/255.0))
     
     def pdffill(self):
-        return '%s rg' % self.pdf()
+        return '%s %s %s rg' % (
+            dump(self.r/255.0),
+            dump(self.g/255.0),
+            dump(self.b/255.0))
     
     def svg(self):
-        r, g, b = self.intensities
-        return 'rgb(%s,%s,%s)' % (dump(r), dump(g), dump(b))
-
+        return 'rgb(%s,%s,%s)' % (
+            dump(self.r),
+            dump(self.g),
+            dump(self.b))
+    
+    def rasterize(self, rasterizer):
+        if rasterizer.image.kind != 'rgb':
+            raise ValueError('Invalid color kind.')
+        rasterizer.rasterize(self.r, self.g, self.b)
 
 class rgba(object):
     
-    __slots__ = 'intensities',
-    
-    kind = 'rgba'
+    __slots__ = 'r', 'g', 'b', 'a'
     
     def __init__(self, r, g, b, a):
-        self.intensities = r, g, b, a
+        self.r, self.g, self.b, self.a = r, g, b, a
     
     def __ne__(self, other):
-        return type(other) != rgba or self.intensities != other.intensities
-    
-    def pdf(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        return not isinstance(other, rgb) or \
+            self.r != other.r or \
+            self.g != other.g or \
+            self.b != other.b or \
+            self.a != other.a
     
     def pdfstroke(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        raise NotImplementedError('PDF does not support RGB + alpha.')
     
     def pdffill(self):
-        raise NotImplementedError('PDF transparency not supported.')
+        raise NotImplementedError('PDF does not support RGB + alpha.')
     
     def svg(self):
-        raise NotImplementedError('SVG does not yet support "rgba".')
-
+        raise NotImplementedError('SVG does not support RGB + alpha.')
+    
+    def rasterize(self, rasterizer):
+        if rasterizer.image.kind != 'rgba':
+            raise ValueError('Invalid color kind.')
+        rasterizer.rasterize(self.r, self.g, self.b, self.a)
 
 class cmyk(object):
     
-    __slots__ = 'tints',
-    
-    kind = 'cmyk'
+    __slots__ = 'c', 'm', 'y', 'k'
     
     def __init__(self, c, m, y, k):
-        self.tints = c, m, y, k
+        self.c, self.m, self.y, self.k = c, m, y, k
     
     def __ne__(self, other):
-        return type(other) != cmyk or self.tints != other.tints
-    
-    def pdf(self):
-        return ' '.join(dump(t * 0.01) for t in self.tints)
+        return not isinstance(other, cmyk) or \
+            self.c != other.c or \
+            self.m != other.m or \
+            self.y != other.y or \
+            self.k != other.k
     
     def pdfstroke(self):
-        return '%s K' % self.pdf()
+        return '%s %s %s %s K' % (
+            dump(self.c/255.0),
+            dump(self.m/255.0),
+            dump(self.y/255.0),
+            dump(self.k/255.0))
     
     def pdffill(self):
-        return '%s k' % self.pdf()
+        return '%s %s %s %s k' % (
+            dump(self.c/255.0),
+            dump(self.m/255.0),
+            dump(self.y/255.0),
+            dump(self.k/255.0))
     
     def svg(self):
         raise NotImplementedError('SVG does not yet support "device-cmyk".')
-
+    
+    def rasterize(self, rasterizer):
+        raise NotImplementedError('Rasterizer does not support CMYK.')
 
 class spot(object):
     
     __slots__ = 'name', 'fallback', 'tint'
     
-    kind = 'spot'
-    
     def __init__(self, name, fallback):
-        assert type(fallback) == cmyk, 'Invalid fallback kind.'
+        if not isinstance(fallback, cmyk):
+            raise ValueError('Invalid fallback kind.')
         self.name, self.fallback, self.tint = name, fallback, 100.0
     
     def __ne__(self, other):
-        return type(other) != spot or \
-            self.name != other.name or self.tint != other.tint
+        return not isinstance(other, spot) or \
+            self.name != other.name or \
+            self.tint != other.tint
     
     def thinned(self, tint):
-        other = copy(self)
+        other = spot(self.name, self.fallback)
         other.tint = tint
         return other
     
-    def pdf(self):
-        return dump(self.tint * 0.01)
-    
     def pdfstroke(self, name):
-        return '/%s CS %s SCN' % (name, self.pdf())
+        return '/%s CS %s SCN' % (name, dump(self.tint/100.0))
     
     def pdffill(self, name):
-        return '/%s cs %s scn' % (name, self.pdf())
+        return '/%s cs %s scn' % (name, dump(self.tint/100.0))
     
     def svg(self):
         raise NotImplementedError('SVG does not yet support "device-nchannel".')
+    
+    def rasterize(self, rasterizer):
+        raise NotImplementedError('Rasterizer does not support spot colors.')
 
 
-class devicen(object):
-    
-    __slots__ = 'names', 'fallbacks', 'tints'
-    
-    kind = 'devicen'
-    
-    def __init__(self, *spots):
-        self.names, self.fallbacks, self.tints = zip(*(
-            (spot.name, spot.fallback, spot.tint) for spot in spots))
-    
-    def __ne__(self, other):
-        return type(other) != devicen or \
-            self.names != other.names or self.tints != other.tints
-    
-    def thinned(self, *tints):
-        other = copy(self)
-        other.tints = tints
-        return other
-    
-    def pdf(self):
-        return ' '.join(dump(tint * 0.01) for tint in self.tints)
-    
-    def pdfstroke(self, name):
-        return '/%s CS %s SCN' % (name, self.pdf())
-    
-    def pdffill(self, name):
-        return '/%s cs %s scn' % (name, self.pdf())
-    
-    def svg(self):
-        raise NotImplementedError('SVG does not yet support "device-nchannel".')
 
 
 class overprint(object):
     
     __slots__ = 'color',
     
-    kind = 'overprint'
-    
     def __init__(self, color):
-        assert type(color) in (cmyk, spot, devicen), 'Invalid color kind.'
+        if not isinstance(color, (cmyk, spot)):
+            raise ValueError('Invalid color kind.')
         self.color = color
     
     def __ne__(self, other):
-        return type(other) != overprint or self.color != other.color
+        return not isinstance(other, overprint) or \
+            self.color != other.color
     
     def svg(self):
         raise NotImplementedError('SVG does not support overprint.')
-
-
-
-
-_default_color = gray(0)
+    
+    def rasterize(self, rasterizer):
+        raise NotImplementedError('Rasterizer does not support overprint.')
 
 
 

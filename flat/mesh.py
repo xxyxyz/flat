@@ -1,4 +1,4 @@
-
+from __future__ import division
 from . import stl
 
 
@@ -10,10 +10,13 @@ class mesh(object):
     def openstl(path):
         with open(path, 'rb') as f:
             data = f.read()
-            parse = stl.parseascii if stl.isascii(data) else stl.parse
-            return mesh(*parse(data))
+            if stl.isascii(data):
+                triplets = stl.parseascii(data)
+            else:
+                triplets = stl.parse(data)
+            return mesh(triplets)
     
-    def __init__(self, *triplets):
+    def __init__(self, triplets):
         self.triplets = triplets
     
     def stl(self, path=''):

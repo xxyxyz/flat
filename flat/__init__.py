@@ -3,7 +3,7 @@
 # 
 # http://xxyxyz.org/flat
 # 
-# Copyright (c) 2013 Juraj Sukop
+# Copyright (c) 2013-2017 Juraj Sukop
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy 
 # of this software and associated documentation files (the "Software"), to 
@@ -25,32 +25,36 @@
 # 
 
 __all__ = [
-    'gray', 'ga', 'rgb', 'rgba', 'cmyk', 'spot', 'devicen', 'overprint',
+    'gray', 'ga', 'rgb', 'rgba', 'cmyk', 'spot', 'overprint',
     'moveto', 'lineto', 'quadto', 'curveto', 'closepath',
     'document',
     'view',
+    'tree',
     'font',
     'group',
     'image', 'raw',
     'mesh',
+    'union', 'intersection', 'difference',
     'diffuse', 'scene',
     'shape',
-    'tree',
-    'strike', 'paragraph', 'text']
-__version__ = '0.1'
+    'parsepath',
+    'strike', 'paragraph', 'text', 'outlines']
+__version__ = '0.2'
 
-from .color import gray, ga, rgb, rgba, cmyk, spot, devicen, overprint
+from .color import gray, ga, rgb, rgba, cmyk, spot, overprint
 from .command import moveto, lineto, quadto, curveto, closepath
 from .document import document
 from .even import view
+from .extra import tree
 from .font import font
 from .group import group
 from .image import image, raw
 from .mesh import mesh
+from .path import union, intersection, difference
 from .scene import diffuse, scene
 from .shape import shape
-from .structure import tree
-from .text import strike, paragraph, text
+from .svg import parsepath
+from .text import strike, paragraph, text, outlines
 
 
 

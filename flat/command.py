@@ -1,5 +1,5 @@
-
-from .utils import dump
+from __future__ import division
+from .misc import dump
 
 
 
@@ -13,11 +13,7 @@ class moveto(object):
     
     def transform(self, a, b, c, d, e, f):
         x, y = self.x, self.y
-        self.x, self.y = x*a + y*c + e, x*b + y*d + f
-        return self
-    
-    def flip(self):
-        self.y = -self.y
+        self.x, self.y = x*a+y*c+e, x*b+y*d+f
         return self
     
     def pdf(self, k, x, y):
@@ -25,7 +21,12 @@ class moveto(object):
     
     def svg(self, k, x, y):
         return 'M%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
-
+    
+    def rasterize(self, rasterizer, k, x, y):
+        rasterizer.moveto(self.x*k+x, self.y*k+y)
+    
+    def rasterizestroke(self, rasterizer, k, x, y, distance, join, limit):
+        rasterizer.strokemoveto(self.x*k+x, self.y*k+y, distance, join, limit)
 
 class lineto(object):
     
@@ -36,11 +37,7 @@ class lineto(object):
     
     def transform(self, a, b, c, d, e, f):
         x, y = self.x, self.y
-        self.x, self.y = x*a + y*c + e, x*b + y*d + f
-        return self
-    
-    def flip(self):
-        self.y = -self.y
+        self.x, self.y = x*a+y*c+e, x*b+y*d+f
         return self
     
     def pdf(self, k, x, y):
@@ -48,7 +45,12 @@ class lineto(object):
     
     def svg(self, k, x, y):
         return 'L%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
-
+    
+    def rasterize(self, rasterizer, k, x, y):
+        rasterizer.lineto(self.x*k+x, self.y*k+y)
+    
+    def rasterizestroke(self, rasterizer, k, x, y, distance, join, limit):
+        rasterizer.strokelineto(self.x*k+x, self.y*k+y, distance, join, limit)
 
 class quadto(object):
     
@@ -61,13 +63,8 @@ class quadto(object):
     def transform(self, a, b, c, d, e, f):
         x1, y1 = self.x1, self.y1
         x, y = self.x, self.y
-        self.x1, self.y1 = x1*a + y1*c + e, x1*b + y1*d + f
-        self.x, self.y = x*a + y*c + e, x*b + y*d + f
-        return self
-    
-    def flip(self):
-        self.y1 = -self.y1
-        self.y = -self.y
+        self.x1, self.y1 = x1*a+y1*c+e, x1*b+y1*d+f
+        self.x, self.y = x*a+y*c+e, x*b+y*d+f
         return self
     
     def pdf(self, k, x, y):
@@ -77,7 +74,16 @@ class quadto(object):
         return 'Q%s,%s,%s,%s' % (
             dump(self.x1*k+x), dump(self.y1*k+y),
             dump(self.x*k+x), dump(self.y*k+y))
-
+    
+    def rasterize(self, rasterizer, k, x, y):
+        rasterizer.quadto(
+            self.x1*k+x, self.y1*k+y,
+            self.x*k+x, self.y*k+y)
+    
+    def rasterizestroke(self, rasterizer, k, x, y, distance, join, limit):
+        rasterizer.strokequadto(
+            self.x1*k+x, self.y1*k+y,
+            self.x*k+x, self.y*k+y, distance, join, limit)
 
 class curveto(object):
     
@@ -92,15 +98,9 @@ class curveto(object):
         x1, y1 = self.x1, self.y1
         x2, y2 = self.x2, self.y2
         x, y = self.x, self.y
-        self.x1, self.y1 = x1*a + y1*c + e, x1*b + y1*d + f
-        self.x2, self.y2 = x2*a + y2*c + e, x2*b + y2*d + f
-        self.x, self.y = x*a + y*c + e, x*b + y*d + f
-        return self
-    
-    def flip(self):
-        self.y1 = -self.y1
-        self.y2 = -self.y2
-        self.y = -self.y
+        self.x1, self.y1 = x1*a+y1*c+e, x1*b+y1*d+f
+        self.x2, self.y2 = x2*a+y2*c+e, x2*b+y2*d+f
+        self.x, self.y = x*a+y*c+e, x*b+y*d+f
         return self
     
     def pdf(self, k, x, y):
@@ -114,17 +114,22 @@ class curveto(object):
             dump(self.x1*k+x), dump(self.y1*k+y),
             dump(self.x2*k+x), dump(self.y2*k+y),
             dump(self.x*k+x), dump(self.y*k+y))
-
+    
+    def rasterize(self, rasterizer, k, x, y):
+        rasterizer.curveto(
+            self.x1*k+x, self.y1*k+y,
+            self.x2*k+x, self.y2*k+y,
+            self.x*k+x, self.y*k+y)
+    
+    def rasterizestroke(self, rasterizer, k, x, y, distance, join, limit):
+        rasterizer.strokecurveto(
+            self.x1*k+x, self.y1*k+y,
+            self.x2*k+x, self.y2*k+y,
+            self.x*k+x, self.y*k+y, distance, join, limit)
 
 class closepath(object):
     
-    def __call__(self):
-        return self
-    
     def transform(self, a, b, c, d, e, f):
-        return self
-    
-    def flip(self):
         return self
     
     def pdf(self, k, x, y):
@@ -132,6 +137,12 @@ class closepath(object):
     
     def svg(self, k, x, y):
         return 'z'
+    
+    def rasterize(self, rasterizer, k, x, y):
+        rasterizer.closepath()
+    
+    def rasterizestroke(self, rasterizer, k, x, y, distance, join, limit):
+        rasterizer.strokeclosepath(distance, join, limit)
 
 closepath = closepath()
 
