@@ -1,49 +1,48 @@
 from __future__ import division
+
 from math import hypot
 from struct import pack
 from unicodedata import normalize
+
 from .cff import cff
-from .command import moveto, lineto, quadto, closepath
+from .command import closepath, lineto, moveto, quadto
 from .readable import readable
 
 
-
-
 class otf(object):
-    
     @staticmethod
     def valid(data):
-        for version in ('\0\1\0\0', 'OTTO', 'true', 'typ1', 'ttcf'):
+        for version in ("\0\1\0\0", "OTTO", "true", "typ1", "ttcf"):
             if data.startswith(version):
                 return True
         return False
-    
+
     def __init__(self, data, index=0):
         self.readable = r = readable(data)
-        if data.startswith('ttcf'):
-            r.skip(4 + 4) # TTCTag, Version
+        if data.startswith("ttcf"):
+            r.skip(4 + 4)  # TTCTag, Version
             numFonts = r.uint32()
             if index >= numFonts:
-                raise ValueError('Invalid collection index.')
-            r.skip(index*4)
-            r.jump(r.uint32()) # offset
+                raise ValueError("Invalid collection index.")
+            r.skip(index * 4)
+            r.jump(r.uint32())  # offset
         self.offset = offset(r)
         self.records = [record(r) for i in range(self.offset.numTables)]
         self.records.sort(key=lambda entry: entry.tag)
-        if data.startswith('OTTO'):
-            self.find('CFF ')
+        if data.startswith("OTTO"):
+            self.find("CFF ")
             self.cff = cff(r)
         else:
             self.cff = None
         self.indexToLocFormat = self.head().indexToLocFormat
         self.numGlyphs = self.maxp().numGlyphs
-    
+
     def find(self, tag):
         records = self.records
         i, j = 0, len(records)
         if i < j:
             while i < j:
-                m = (i + j)//2
+                m = (i + j) // 2
                 if records[m].tag < tag:
                     i = m + 1
                 else:
@@ -52,29 +51,29 @@ class otf(object):
             if entry.tag == tag:
                 self.readable.jump(entry.offset)
                 return entry
-        raise ValueError('`%s` table not found.' % tag)
-    
+        raise ValueError("`%s` table not found." % tag)
+
     def psname(self):
-        return self.name(6) # Postscript name
-    
+        return self.name(6)  # Postscript name
+
     def density(self):
         return self.head().unitsPerEm
-    
+
     def ascender(self):
         return self.os2().sTypoAscender
-    
+
     def descender(self):
         return self.os2().sTypoDescender
-    
+
     def glyph(self, index):
         if self.cff:
             return self.cff.type2(index)
         return self.glyf(index)
-    
+
     def charmap(self):
         r = self.readable
-        cmap = self.find('cmap')
-        r.skip(2) # version
+        cmap = self.find("cmap")
+        r.skip(2)  # version
         numTables = r.uint16()
         for i in range(numTables):
             platformID = r.uint16()
@@ -83,21 +82,21 @@ class otf(object):
             kind = platformID, encodingID
             if kind == (3, 1) or kind == (0, 3):
                 r.jump(cmap.offset + offset)
-                if r.uint16() == 4: # format
+                if r.uint16() == 4:  # format
                     break
         else:
-            raise ValueError('Unicode BMP encoding not found.')
+            raise ValueError("Unicode BMP encoding not found.")
         length = r.uint16()
-        r.skip(2) # language
+        r.skip(2)  # language
         segCountX2 = r.uint16()
-        segCount = segCountX2//2
-        r.skip(2 + 2 + 2) # searchRange, entrySelector, rangeShift
+        segCount = segCountX2 // 2
+        r.skip(2 + 2 + 2)  # searchRange, entrySelector, rangeShift
         endCount = [r.uint16() for i in range(segCount)]
-        r.skip(2) # reservedPad
+        r.skip(2)  # reservedPad
         startCount = [r.uint16() for i in range(segCount)]
         idDelta = [r.int16() for i in range(segCount)]
         idRangeOffset = [r.uint16() for i in range(segCount)]
-        count = (cmap.offset + offset + length - r.position)//2
+        count = (cmap.offset + offset + length - r.position) // 2
         glyphIdArray = [r.uint16() for i in range(count)]
         result = {}
         for i in range(segCount):
@@ -110,48 +109,48 @@ class otf(object):
                     result[code] = (code + delta) & 0xffff
             else:
                 for code in range(start, end + 1):
-                    index = rangeoffset//2 + (code - start) - (segCount - i)
+                    index = rangeoffset // 2 + (code - start) - (segCount - i)
                     if index < count:
                         result[code] = (glyphIdArray[index] + delta) & 0xffff
                     else:
                         result[code] = 0
         return result
-    
+
     def advances(self):
         r = self.readable
         numberOfHMetrics = self.hhea().numberOfHMetrics
         result = []
-        hmtx = self.find('hmtx')
+        hmtx = self.find("hmtx")
         advanceWidth = 0
         for i in range(numberOfHMetrics):
             advanceWidth = r.uint16()
-            r.skip(2) # lsb
+            r.skip(2)  # lsb
             result.append(advanceWidth)
-        result.extend([advanceWidth]*(self.numGlyphs - numberOfHMetrics))
+        result.extend([advanceWidth] * (self.numGlyphs - numberOfHMetrics))
         return result
-    
+
     def kerning(self):
         r = self.readable
         result = [{} for i in range(self.numGlyphs)]
         for entry in self.records:
-            if entry.tag == 'kern':
+            if entry.tag == "kern":
                 r.jump(entry.offset)
-                r.skip(2) # version
+                r.skip(2)  # version
                 nTables = r.uint16()
                 for i in range(nTables):
-                    r.skip(2 + 2) # version, length
+                    r.skip(2 + 2)  # version, length
                     coverage = r.uint16()
                     if coverage >> 8 != 0:
-                        raise ValueError('Unsupported kern subtable format.')
+                        raise ValueError("Unsupported kern subtable format.")
                     nPairs = r.uint16()
-                    r.skip(2 + 2 + 2) # searchRange, entrySelector, rangeShift
+                    r.skip(2 + 2 + 2)  # searchRange, entrySelector, rangeShift
                     for j in range(nPairs):
                         left, right, value = r.uint16(), r.uint16(), r.int16()
                         result[left][right] = value
                 break
-            if entry.tag == 'GPOS':
+            if entry.tag == "GPOS":
                 r.jump(entry.offset)
-                r.skip(2 + 2) # MajorVersion, MinorVersion
+                r.skip(2 + 2)  # MajorVersion, MinorVersion
                 ScriptList = r.uint16()
                 FeatureList = r.uint16()
                 LookupList = r.uint16()
@@ -163,20 +162,20 @@ class otf(object):
                 for i in range(FeatureCount):
                     FeatureTag = r.read(4)
                     Feature = r.uint16()
-                    if FeatureTag == 'kern':
+                    if FeatureTag == "kern":
                         r.jump(entry.offset + FeatureList + Feature)
                         break
                 else:
                     continue
-                r.skip(2) # FeatureParams
+                r.skip(2)  # FeatureParams
                 LookupCount = r.uint16()
                 LookupListIndex = [r.uint16() for i in range(LookupCount)]
                 for index in LookupListIndex:
                     lookup = Lookup[index]
                     r.jump(entry.offset + LookupList + lookup)
                     LookupType = r.uint16()
-                    if LookupType == 2: # Pair adjustment
-                        r.skip(2) # LookupFlag
+                    if LookupType == 2:  # Pair adjustment
+                        r.skip(2)  # LookupFlag
                         SubTableCount = r.uint16()
                         SubTable = [r.uint16() for i in range(SubTableCount)]
                         for subtable in SubTable:
@@ -186,14 +185,14 @@ class otf(object):
                             Coverage = r.uint16()
                             ValueFormat1 = r.uint16()
                             ValueFormat2 = r.uint16()
-                            if ValueFormat1 == 4 and ValueFormat2 == 0: # XAdvance
+                            if ValueFormat1 == 4 and ValueFormat2 == 0:  # XAdvance
                                 s = r.clone()
                                 s.jump(PairPos + Coverage)
                                 coverage = _parse_coverage(s)
                                 if PosFormat == 1:
                                     PairSetCount = r.uint16()
                                     if PairSetCount != len(coverage):
-                                        raise ValueError('Invalid GPOS PairSetCount.')
+                                        raise ValueError("Invalid GPOS PairSetCount.")
                                     for first in coverage:
                                         PairSetOffset = r.uint16()
                                         s.jump(PairPos + PairSetOffset)
@@ -222,53 +221,62 @@ class otf(object):
                                                         result[first][second] = Value1
                 break
         return result
-    
+
     def embed(self):
         r = self.readable
         if self.cff:
-            entry = self.find('CFF ')
+            entry = self.find("CFF ")
             return r.read(entry.length)
-        tags = 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep'
+        tags = "cvt ", "fpgm", "glyf", "head", "hhea", "hmtx", "loca", "maxp", "prep"
         numTables = 0
         for entry in self.records:
             if entry.tag in tags:
                 numTables += 1
         records, tables = [], []
-        position = 4+2+2+2+2 + numTables*(4+4+4+4) # offset table + records
+        position = (
+            4 + 2 + 2 + 2 + 2 + numTables * (4 + 4 + 4 + 4)
+        )  # offset table + records
         head = 0
         total = 0
         for entry in self.records:
             if entry.tag in tags:
-                if entry.tag == 'head':
+                if entry.tag == "head":
                     head = position
                 r.jump(entry.offset)
                 length = entry.length
                 padding = 4 - length & 3
                 data = r.read(length)
-                records.append(pack('>4s3L', bytes(entry.tag),
-                    entry.checkSum, position, length)) # TODO python 3: remove bytes
+                records.append(
+                    pack(">4s3L", bytes(entry.tag), entry.checkSum, position, length)
+                )  # TODO python 3: remove bytes
                 tables.append(data)
-                tables.append('\0'*padding)
+                tables.append("\0" * padding)
                 position += length + padding
                 total += entry.checkSum
         entrySelector = numTables.bit_length() - 1
         searchRange = 16 << entrySelector
-        rangeShift = 16*numTables - searchRange
-        offset = pack('>L4H', self.offset.sfntVersion,
-            numTables, entrySelector, searchRange, rangeShift)
+        rangeShift = 16 * numTables - searchRange
+        offset = pack(
+            ">L4H",
+            self.offset.sfntVersion,
+            numTables,
+            entrySelector,
+            searchRange,
+            rangeShift,
+        )
         data = bytearray(offset)
-        data += ''.join(records)
+        data += "".join(records)
         r = readable(data)
-        for i in range(len(data)//4):
+        for i in range(len(data) // 4):
             total += r.uint32()
         data += bytearray().join(tables)
-        data[head+8:head+12] = pack('>L', 0xb1b0afba - total & 0xffffffff)
+        data[head + 8 : head + 12] = pack(">L", 0xb1b0afba - total & 0xffffffff)
         return data
-    
+
     def name(self, nameid):
         r = self.readable
-        name = self.find('name')
-        r.skip(2) # format
+        name = self.find("name")
+        r.skip(2)  # format
         count = r.uint16()
         stringOffset = r.uint16()
         for i in range(count):
@@ -285,50 +293,50 @@ class otf(object):
                     return r.read(length)
                 if kind == (3, 1, 0x409):
                     r.jump(name.offset + stringOffset + offset)
-                    s = r.read(length).decode('utf-16be')
-                    return normalize('NFKD', s).encode('ascii', 'ignore')
-        raise ValueError('String not found.')
-    
+                    s = r.read(length).decode("utf-16be")
+                    return normalize("NFKD", s).encode("ascii", "ignore")
+        raise ValueError("String not found.")
+
     def loca(self, index):
         r = self.readable
-        loca = self.find('loca')
+        loca = self.find("loca")
         if self.indexToLocFormat == 0:
-            r.skip(index*2)
-            offset = r.uint16()*2
+            r.skip(index * 2)
+            offset = r.uint16() * 2
         else:
-            r.skip(index*4)
+            r.skip(index * 4)
             offset = r.uint32()
         return offset
-    
+
     def glyf(self, index):
         r = self.readable
         result = []
         location = self.loca(index)
         if location == self.loca(index + 1):
             return result
-        glyf = self.find('glyf')
+        glyf = self.find("glyf")
         r.skip(location)
         numberOfContours = r.int16()
-        r.skip(8) # xMin, yMin, xMax, yMax
+        r.skip(8)  # xMin, yMin, xMax, yMax
         if numberOfContours > 0:
             endPtsOfContours = [r.uint16() for i in range(numberOfContours)]
             instructionLength = r.uint16()
-            r.skip(instructionLength) # instructions
+            r.skip(instructionLength)  # instructions
             count = endPtsOfContours[-1] + 1
             flags = bytearray(count)
             f = repeat = 0
             for i in range(count):
                 if repeat == 0:
                     f = r.uint8()
-                    if f & 8: # Repeat
+                    if f & 8:  # Repeat
                         repeat = r.uint8()
                 else:
                     repeat -= 1
                 flags[i] = f
-            x, xs = 0, [0]*count
+            x, xs = 0, [0] * count
             i = 0
             for f in flags:
-                f &= 18 # x-Short Vector + This x is same
+                f &= 18  # x-Short Vector + This x is same
                 if f == 18:
                     x += r.uint8()
                 elif f == 2:
@@ -337,10 +345,10 @@ class otf(object):
                     x += r.int16()
                 xs[i] = x
                 i += 1
-            y, ys = 0, [0]*count
+            y, ys = 0, [0] * count
             i = 0
             for f in flags:
-                f &= 36 # y-Short Vector + This y is same
+                f &= 36  # y-Short Vector + This y is same
                 if f == 36:
                     y += r.uint8()
                 elif f == 4:
@@ -351,16 +359,16 @@ class otf(object):
                 i += 1
             end = -1
             for i in range(numberOfContours):
-                start, end = end+1, endPtsOfContours[i]
-                ax, ay, af = xs[end], ys[end], flags[end] & 1 # On Curve
+                start, end = end + 1, endPtsOfContours[i]
+                ax, ay, af = xs[end], ys[end], flags[end] & 1  # On Curve
                 first = moveto(0.0, 0.0)
                 result.append(first)
-                for j in range(start, end+1):
+                for j in range(start, end + 1):
                     bx, by, bf = xs[j], ys[j], flags[j] & 1
                     if bf:
                         result.append(lineto(bx, by) if af else quadto(ax, ay, bx, by))
                     elif not af:
-                        result.append(quadto(ax, ay, (ax+bx)*0.5, (ay+by)*0.5))
+                        result.append(quadto(ax, ay, (ax + bx) * 0.5, (ay + by) * 0.5))
                     ax, ay, af = bx, by, bf
                 last = result[-1]
                 first.x, first.y = last.x, last.y
@@ -371,59 +379,56 @@ class otf(object):
                 flags = s.uint16()
                 glyphIndex = s.uint16()
                 if flags & 2 == 0:
-                     raise NotImplementedError('ARGS_ARE_XY_VALUES not implemented.')
+                    raise NotImplementedError("ARGS_ARE_XY_VALUES not implemented.")
                 a, b, c, d = 1.0, 0.0, 0.0, 1.0
-                if flags & 1: # ARG_1_AND_2_ARE_WORDS
+                if flags & 1:  # ARG_1_AND_2_ARE_WORDS
                     e, f = s.int16(), s.int16()
                 else:
                     e, f = s.int8(), s.int8()
-                if flags & 8: # WE_HAVE_A_SCALE
-                    a = d = s.int16()/16384.0
-                elif flags & 64: # WE_HAVE_AN_X_AND_Y_SCALE
-                    a = s.int16()/16384.0
-                    d = s.int16()/16384.0
-                elif flags & 128: # WE_HAVE_A_TWO_BY_TWO
-                    a = s.int16()/16384.0
-                    b = s.int16()/16384.0
-                    c = s.int16()/16384.0
-                    d = s.int16()/16384.0
-                if flags & 200: # 8 + 64 + 128
-                    if flags & 2048: # SCALED_COMPONENT_OFFSET
+                if flags & 8:  # WE_HAVE_A_SCALE
+                    a = d = s.int16() / 16384.0
+                elif flags & 64:  # WE_HAVE_AN_X_AND_Y_SCALE
+                    a = s.int16() / 16384.0
+                    d = s.int16() / 16384.0
+                elif flags & 128:  # WE_HAVE_A_TWO_BY_TWO
+                    a = s.int16() / 16384.0
+                    b = s.int16() / 16384.0
+                    c = s.int16() / 16384.0
+                    d = s.int16() / 16384.0
+                if flags & 200:  # 8 + 64 + 128
+                    if flags & 2048:  # SCALED_COMPONENT_OFFSET
                         e *= hypot(a, c)
                         f *= hypot(b, d)
                 component = self.glyf(glyphIndex)
                 for command in component:
                     command.transform(a, b, c, d, e, f)
                 result.extend(component)
-                if flags & 32 == 0: # MORE_COMPONENTS
+                if flags & 32 == 0:  # MORE_COMPONENTS
                     break
         return result
-    
+
     def head(self):
-        self.find('head')
+        self.find("head")
         return head(self.readable)
-    
+
     def hhea(self):
-        self.find('hhea')
+        self.find("hhea")
         return hhea(self.readable)
-    
+
     def maxp(self):
-        self.find('maxp')
+        self.find("maxp")
         return maxp(self.readable)
-    
+
     def os2(self):
-        self.find('OS/2')
+        self.find("OS/2")
         return os2(self.readable)
-        
+
     def post(self):
-        self.find('post')
+        self.find("post")
         return post(self.readable)
 
 
-
-
 class offset(object):
-    
     def __init__(self, readable):
         self.sfntVersion = readable.uint32()
         self.numTables = readable.uint16()
@@ -431,8 +436,8 @@ class offset(object):
         self.entrySelector = readable.uint16()
         self.rangeShift = readable.uint16()
 
+
 class record(object):
-    
     def __init__(self, readable):
         self.tag = readable.read(4)
         self.checkSum = readable.uint32()
@@ -440,10 +445,7 @@ class record(object):
         self.length = readable.uint32()
 
 
-
-
 class head(object):
-    
     def __init__(self, readable):
         self.majorVersion = readable.uint16()
         self.minorVersion = readable.uint16()
@@ -452,8 +454,8 @@ class head(object):
         self.magicNumber = readable.uint32()
         self.flags = readable.uint16()
         self.unitsPerEm = readable.uint16()
-        self.created = readable.parse('>q') # int64
-        self.modified = readable.parse('>q')
+        self.created = readable.parse(">q")  # int64
+        self.modified = readable.parse(">q")
         self.xMin = readable.int16()
         self.yMin = readable.int16()
         self.xMax = readable.int16()
@@ -464,8 +466,8 @@ class head(object):
         self.indexToLocFormat = readable.int16()
         self.glyphDataFormat = readable.int16()
 
+
 class hhea(object):
-    
     def __init__(self, readable):
         self.majorVersion = readable.uint16()
         self.minorVersion = readable.uint16()
@@ -479,18 +481,18 @@ class hhea(object):
         self.caretSlopeRise = readable.int16()
         self.caretSlopeRun = readable.int16()
         self.caretOffset = readable.int16()
-        readable.skip(2 + 2 + 2 + 2) # reserved
+        readable.skip(2 + 2 + 2 + 2)  # reserved
         self.metricDataFormat = readable.int16()
         self.numberOfHMetrics = readable.uint16()
 
+
 class maxp(object):
-    
     def __init__(self, readable):
         self.version = readable.int32()
         self.numGlyphs = readable.uint16()
 
+
 class os2(object):
-    
     def __init__(self, readable):
         self.version = readable.uint16()
         self.xAvgCharWidth = readable.int16()
@@ -541,8 +543,8 @@ class os2(object):
         self.usLowerOpticalPointSize = readable.uint16()
         self.usUpperOpticalPointSize = readable.uint16()
 
+
 class post(object):
-    
     def __init__(self, readable):
         self.version = readable.int32()
         self.italicAngle = readable.int32()
@@ -553,8 +555,6 @@ class post(object):
         self.maxMemType42 = readable.uint32()
         self.minMemType1 = readable.uint32()
         self.maxMemType1 = readable.uint32()
-
-
 
 
 def _parse_coverage(readable):
@@ -570,11 +570,12 @@ def _parse_coverage(readable):
         for i in range(RangeCount):
             StartGlyphID = readable.uint16()
             EndGlyphID = readable.uint16()
-            readable.skip(2) # StartCoverageIndex
+            readable.skip(2)  # StartCoverageIndex
             coverage.extend(range(StartGlyphID, EndGlyphID + 1))
     else:
-        raise ValueError('Invalid CoverageFormat.')
+        raise ValueError("Invalid CoverageFormat.")
     return coverage
+
 
 def _parse_classdefinition(readable, count):
     definition = [[] for i in range(count)]
@@ -593,9 +594,5 @@ def _parse_classdefinition(readable, count):
             Class = readable.uint16()
             definition[Class].extend(range(StartGlyphID, EndGlyphID + 1))
     else:
-        raise ValueError('Invalid ClassFormat.')
+        raise ValueError("Invalid ClassFormat.")
     return definition
-
-
-
-
