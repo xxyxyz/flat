@@ -4,7 +4,9 @@ language: python
 matrix:
   include:
     - python: 2.7
-      env: TOXENV=py27,fix-lint
+      env: TOXENV=py27
+    - python: 3.6
+      env: TOXENV=fix-lint
 
 install: pip install tox
 
