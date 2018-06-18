@@ -57,7 +57,14 @@ __all__ = [
     "union",
     "view",
 ]
-__version__ = "0.2"
+
+from pkg_resources import get_distribution, DistributionNotFound
+
+try:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
+    # Package was not properly installed.
+    __version__ = "0.0.0+unknown"
 
 from .color import gray, ga, rgb, rgba, cmyk, spot, overprint
 from .command import moveto, lineto, quadto, curveto, closepath
