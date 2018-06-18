@@ -1,34 +1,31 @@
 from __future__ import division
+
+import re
 from xml.sax.saxutils import escape
-from .color import gray, spot, overprint
+
+from .color import gray, overprint, spot
 from .misc import dump, inf, rmq, scale
 from .path import elevated
-import re
 
-
-
-
-linebreaks = re.compile(ur'\r\n|[\n\v\f\r\x85\u2028\u2029]') # TODO python 3: ur -> r
-boundaries = re.compile(ur'([^\s-]+-?|-|^)(\s*)') # TODO python 3: ur -> r
-
-
+linebreaks = re.compile(r"\r\n|[\n\v\f\r\x85\u2028\u2029]")
+boundaries = re.compile(r"([^\s-]+-?|-|^)(\s*)")
 
 
 class style(object):
-    
-    __slots__ = 'font', 'size', 'leading', 'color'
-    
+
+    __slots__ = "font", "size", "leading", "color"
+
     def __init__(self, font):
         self.font = font
         self.size, self.leading = 10.0, 12.0
         self.color = gray(0)
-    
+
     def ascender(self):
-        return self.font.ascender/self.font.density*self.size
-    
+        return self.font.ascender / self.font.density * self.size
+
     def descender(self):
-        return self.font.descender/self.font.density*self.size
-    
+        return self.font.descender / self.font.density * self.size
+
     def width(self, string):
         result = 0
         previous = 0
@@ -38,8 +35,8 @@ class style(object):
             result += self.font.kerning[previous].get(index, 0)
             result += self.font.advances[index]
             previous = index
-        return result/self.font.density*self.size
-    
+        return result / self.font.density * self.size
+
     def boundaries(self, string, start):
         previous = 0
         for m in boundaries.finditer(string, start):
@@ -58,24 +55,24 @@ class style(object):
                 space += self.font.kerning[previous].get(index, 0)
                 space += self.font.advances[index]
                 previous = index
-            word = word/self.font.density*self.size
-            space = space/self.font.density*self.size
+            word = word / self.font.density * self.size
+            space = space / self.font.density * self.size
             yield word, space, length
-    
+
     def pdf(self, state, resources, text):
         fragments = []
         if text:
             n, s = self.font.name, self.size
             if n != state.name or s != state.size:
                 resource = resources.font(self.font)
-                fragments.append('/%s %s Tf' % (resource.name, dump(s)))
+                fragments.append("/%s %s Tf" % (resource.name, dump(s)))
                 state.name, state.size = n, s
         f, ff = self.color, state.fill
         fo, ffo = isinstance(f, overprint), isinstance(ff, overprint)
         if f and fo != ffo:
             sso = isinstance(state.stroke, overprint)
             resource = resources.overprint(sso, fo)
-            fragments.append('/%s gs' % resource.name)
+            fragments.append("/%s gs" % resource.name)
         if fo:
             f = f.color
         if ffo:
@@ -87,106 +84,94 @@ class style(object):
             else:
                 fragments.append(f.pdffill())
             state.fill = f
-        return ' '.join(fragments)
-
-
+        return " ".join(fragments)
 
 
 class strike(object):
-    
-    __slots__ = 'style',
-    
+
+    __slots__ = ("style",)
+
     def __init__(self, font):
         self.style = style(font)
-    
-    def size(self, size, leading=0.0, units='pt'):
+
+    def size(self, size, leading=0.0, units="pt"):
         if leading == 0.0:
-            leading = 1.1*size + 1.0
+            leading = 1.1 * size + 1.0
         k = scale(units)
-        self.style.size, self.style.leading = size*k, leading*k
+        self.style.size, self.style.leading = size * k, leading * k
         return self
-    
+
     def color(self, color):
         self.style.color = color
         return self
-    
-    def width(self, string, units='pt'):
-        return self.style.width(string)/scale(units)
-    
+
+    def width(self, string, units="pt"):
+        return self.style.width(string) / scale(units)
+
     def span(self, string):
         return span(self.style, string)
-    
+
     def paragraph(self, string):
         return paragraph((self.span(string),))
-    
+
     def text(self, string):
         return text(map(self.paragraph, linebreaks.split(string)))
-    
+
     def outlines(self, string):
         return outlines(map(self.paragraph, linebreaks.split(string)))
 
 
-
-
 class span(object):
-    
-    __slots__ = 'style', 'string'
-    
+
+    __slots__ = "style", "string"
+
     def __init__(self, style, string):
         if linebreaks.search(string):
-            raise ValueError('Unexpected newline character.')
+            raise ValueError("Unexpected newline character.")
         self.style = style
         self.string = string
-    
+
     def boundaries(self, start):
         return self.style.boundaries(self.string, start)
 
 
-
-
 class paragraph(object):
-    
-    __slots__ = 'spans', 'leadings', 'ascenders'
-    
+
+    __slots__ = "spans", "leadings", "ascenders"
+
     def __init__(self, spans):
         if not spans:
-            raise ValueError('No spans.')
+            raise ValueError("No spans.")
         self.spans = spans
         self.leadings = rmq([s.style.leading for s in spans])
         self.ascenders = rmq([s.style.ascender() for s in spans])
 
 
-
-
 class text(object):
-    
-    __slots__ = 'paragraphs',
-    
+
+    __slots__ = ("paragraphs",)
+
     def __init__(self, paragraphs):
         if not paragraphs:
-            raise ValueError('No paragraphs.')
+            raise ValueError("No paragraphs.")
         self.paragraphs = paragraphs
-    
+
     def placed(self, k):
         return placedtext(layout(self.paragraphs), k)
 
 
-
-
 class outlines(text):
-    
-    __slots__ = 'paragraphs',
-    
+
+    __slots__ = ("paragraphs",)
+
     def placed(self, k):
         return placedoutlines(layout(self.paragraphs), k)
 
 
-
-
 class layout(object):
-    
-    __slots__ = 'paragraphs', 'start', 'lines'
-    
+
+    __slots__ = "paragraphs", "start", "lines"
+
     def __init__(self, paragraphs, start=(0, 0, 0)):
         self.paragraphs = paragraphs
         self.start = start
@@ -202,11 +187,11 @@ class layout(object):
                 height = paragraph.ascenders.max(j, n)
             else:
                 height = paragraph.leadings.max(j, n)
-            end = len(lines), n-1, len(string)
+            end = len(lines), n - 1, len(string)
             lines.append((height, end))
             j = 0
             i += 1
-    
+
     def reflow(self, width, height):
         self.lines[:] = []
         i, j, k = self.start
@@ -250,7 +235,7 @@ class layout(object):
             j = 0
             k = 0
             y += dy
-    
+
     def run(self, start, end):
         i, j, k = start
         u, v, w = end
@@ -266,45 +251,45 @@ class layout(object):
             yield style, string
             j += 1
             k = 0
-    
+
     def runs(self):
         start = self.start
         for height, end in self.lines:
             yield height, self.run(start, end)
             start = self.norm(end)
-    
+
     def norm(self, end):
         i, j, k = end
         spans = self.paragraphs[i].spans
         if len(spans[j].string) == k:
             if len(spans) - 1 == j:
-                return i+1, 0, 0
-            return i, j+1, 0
+                return i + 1, 0, 0
+            return i, j + 1, 0
         return end
-    
+
     def end(self):
         if self.lines:
             height, end = self.lines[-1]
             return end
         return self.tail()
-    
+
     def tail(self):
         paragraphs = self.paragraphs
         spans = paragraphs[-1].spans
         string = spans[-1].string
-        return len(paragraphs)-1, len(spans)-1, len(string)
-    
+        return len(paragraphs) - 1, len(spans) - 1, len(string)
+
     def overflow(self):
         return self.end() != self.tail()
-    
+
     def chain(self):
         start = self.norm(self.end())
         return layout(self.paragraphs, start)
-    
+
     def clear(self):
         self.start = self.norm(self.tail())
         self.lines[:] = []
-    
+
     def link(self, following):
         start = self.norm(self.end())
         if start == following.start:
@@ -313,26 +298,24 @@ class layout(object):
         return False
 
 
-
-
 class placedtext(object):
-    
-    __slots__ = 'layout', 'k', 'x', 'y', 'width', 'height', 'next'
-    
+
+    __slots__ = "layout", "k", "x", "y", "width", "height", "next"
+
     def __init__(self, layout, k):
         self.layout = layout
         self.k = k
         self.x, self.y = 0.0, 0.0
         self.width, self.height = inf, inf
         self.next = None
-    
+
     def position(self, x, y):
-        self.x, self.y = x*self.k, y*self.k
+        self.x, self.y = x * self.k, y * self.k
         return self
-    
+
     def frame(self, x, y, width, height):
-        self.x, self.y = x*self.k, y*self.k
-        self.width, self.height = width*self.k, height*self.k
+        self.x, self.y = x * self.k, y * self.k
+        self.width, self.height = width * self.k, height * self.k
         block = self
         while True:
             block.layout.reflow(block.width, block.height)
@@ -342,10 +325,10 @@ class placedtext(object):
                 break
             block = block.next
         return self
-    
+
     def overflow(self):
         return self.layout.overflow()
-    
+
     def chained(self, k):
         layout = self.layout.chain()
         block = type(self)(layout, k)
@@ -356,36 +339,37 @@ class placedtext(object):
             block.layout.clear()
             block = block.next
         return self.next
-    
+
     def lines(self):
-        return [''.join(string for style, string in run)
-            for height, run in self.layout.runs()]
-    
+        return [
+            "".join(string for style, string in run)
+            for height, run in self.layout.runs()
+        ]
+
     def pdf(self, height, state, resources):
-        fragments = ['BT',
-            '1 0 0 1 %s %s Tm' % (dump(self.x), dump(height-self.y))]
+        fragments = ["BT", "1 0 0 1 %s %s Tm" % (dump(self.x), dump(height - self.y))]
         for height, run in self.layout.runs():
-            fragments.append('0 %s Td' % dump(-height))
+            fragments.append("0 %s Td" % dump(-height))
             for style, string in run:
                 setup = style.pdf(state, resources, True)
                 if setup:
                     fragments.append(setup)
                 line = []
                 previous = 0
-                factor = -1000.0/style.font.density
+                factor = -1000.0 / style.font.density
                 for character in string:
                     code = ord(character)
                     index = style.font.charmap.get(code, 0)
                     kerning = style.font.kerning[previous].get(index, 0)
                     if kerning != 0:
-                        line.append('%d' % round(kerning*factor))
-                    line.append('<%04x>' % index)
+                        line.append("%d" % round(kerning * factor))
+                    line.append("<%04x>" % index)
                     previous = index
                 if line:
-                    fragments.append('[%s] TJ' % ''.join(line))
-        fragments.append('ET')
-        return '\n'.join(fragments)
-    
+                    fragments.append("[%s] TJ" % "".join(line))
+        fragments.append("ET")
+        return "\n".join(fragments)
+
     def svg(self):
         fragments = []
         y = self.y
@@ -395,38 +379,41 @@ class placedtext(object):
             line = ['<text x="%s" y="%s" xml:space="preserve">' % (dump(x), dump(y))]
             for style, string in run:
                 line.append(
-                    '<tspan font-family="%s" font-size="%s" fill="%s">%s</tspan>' % (
-                        style.font.name, style.size, style.color.svg(),
-                        escape(string).encode('utf-8')))
-            line.append('</text>')
-            fragments.append(''.join(line))
-        return '\n'.join(fragments)
-    
+                    '<tspan font-family="%s" font-size="%s" fill="%s">%s</tspan>'
+                    % (
+                        style.font.name,
+                        style.size,
+                        style.color.svg(),
+                        escape(string).encode("utf-8"),
+                    )
+                )
+            line.append("</text>")
+            fragments.append("".join(line))
+        return "\n".join(fragments)
+
     def rasterize(self, rasterizer, k, x, y):
-        origin, y = self.x*k+x, self.y*k+y
+        origin, y = self.x * k + x, self.y * k + y
         for height, run in self.layout.runs():
             x = origin
-            y += height*k
+            y += height * k
             for style, string in run:
                 previous = 0
-                factor = style.size/style.font.density*k
+                factor = style.size / style.font.density * k
                 for character in string:
                     code = ord(character)
                     index = style.font.charmap.get(code, 0)
-                    x += style.font.kerning[previous].get(index, 0)*factor
+                    x += style.font.kerning[previous].get(index, 0) * factor
                     for c in style.font.glyph(index):
                         c.rasterize(rasterizer, factor, x, y)
                     style.color.rasterize(rasterizer)
-                    x += style.font.advances[index]*factor
+                    x += style.font.advances[index] * factor
                     previous = index
 
 
-
-
 class placedoutlines(placedtext):
-    
-    __slots__ = 'layout', 'k', 'x', 'y', 'width', 'height', 'next'
-    
+
+    __slots__ = "layout", "k", "x", "y", "width", "height", "next"
+
     def pdf(self, height, state, resources):
         fragments = []
         y = height - self.y
@@ -438,20 +425,20 @@ class placedoutlines(placedtext):
                 if setup:
                     fragments.append(setup)
                 previous = 0
-                factor = style.size/style.font.density
+                factor = style.size / style.font.density
                 for character in string:
                     code = ord(character)
                     index = style.font.charmap.get(code, 0)
-                    x += style.font.kerning[previous].get(index, 0)*factor
+                    x += style.font.kerning[previous].get(index, 0) * factor
                     commands = style.font.glyph(index)
                     if commands:
                         tokens = [c.pdf(factor, x, y) for c in elevated(commands)]
-                        tokens.append('f')
-                        fragments.append(' '.join(tokens))
-                    x += style.font.advances[index]*factor
+                        tokens.append("f")
+                        fragments.append(" ".join(tokens))
+                    x += style.font.advances[index] * factor
                     previous = index
-        return '\n'.join(fragments)
-    
+        return "\n".join(fragments)
+
     def svg(self):
         fragments = []
         y = self.y
@@ -460,20 +447,20 @@ class placedoutlines(placedtext):
             y += height
             for style, string in run:
                 previous = 0
-                factor = style.size/style.font.density
+                factor = style.size / style.font.density
                 for character in string:
                     code = ord(character)
                     index = style.font.charmap.get(code, 0)
-                    x += style.font.kerning[previous].get(index, 0)*factor
+                    x += style.font.kerning[previous].get(index, 0) * factor
                     commands = style.font.glyph(index)
                     if commands:
-                        fragments.append('<path d="%s" fill="%s" />' % (
-                            ' '.join(c.svg(factor, x, y) for c in commands),
-                            style.color.svg()))
-                    x += style.font.advances[index]*factor
+                        fragments.append(
+                            '<path d="%s" fill="%s" />'
+                            % (
+                                " ".join(c.svg(factor, x, y) for c in commands),
+                                style.color.svg(),
+                            )
+                        )
+                    x += style.font.advances[index] * factor
                     previous = index
-        return '\n'.join(fragments)
-
-
-
-
+        return "\n".join(fragments)

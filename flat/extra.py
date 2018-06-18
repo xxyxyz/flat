@@ -1,14 +1,25 @@
 from __future__ import division
+
 from .misc import inf
 
 
-
-
 class tree(object):
-    
-    __slots__ = 'item', 'parent', 'children', 'x', 'y', '_ancestor', \
-        '_number', '_thread', '_prelim', '_change', '_shift', '_mod'
-    
+
+    __slots__ = (
+        "item",
+        "parent",
+        "children",
+        "x",
+        "y",
+        "_ancestor",
+        "_number",
+        "_thread",
+        "_prelim",
+        "_change",
+        "_shift",
+        "_mod",
+    )
+
     def __init__(self, item):
         self.item = item
         self.parent = None
@@ -21,26 +32,26 @@ class tree(object):
         self._change = 0.0
         self._shift = 0.0
         self._mod = 0.0
-    
+
     def add(self, item):
         t = tree(item)
         t.parent = self
         t._number = len(self.children)
         self.children.append(t)
         return t
-    
+
     def layout(self):
         # Ref.: Buchheim, Ch., Junger, M., Leipert, S. (2002).
         # Improving Walker's algorithm to run in linear time.
         _first_walk(self, None)
         _second_walk(self, -self._prelim, 0.0)
         return self
-    
+
     def transpose(self):
         for node in self.nodes():
             node.x, node.y = node.y, node.x
         return self
-    
+
     def frame(self, x, y, width, height):
         minx, miny, maxx, maxy = inf, inf, 0.0, 0.0
         for node in self.nodes():
@@ -54,19 +65,17 @@ class tree(object):
                 maxy = node.y
         width /= maxx - minx
         height /= maxy - miny
-        x -= minx*width
-        y -= miny*height
+        x -= minx * width
+        y -= miny * height
         for node in self.nodes():
-            node.x, node.y = node.x*width+x, node.y*height+y
+            node.x, node.y = node.x * width + x, node.y * height + y
         return self
-    
+
     def nodes(self):
         yield self
         for child in self.children:
             for node in child.nodes():
                 yield node
-
-
 
 
 def _first_walk(v, left):
@@ -82,7 +91,7 @@ def _first_walk(v, left):
             default = _apportion(w, default, previous)
             previous = w
         _execute_shifts(v)
-        midpoint = 0.5*(v.children[0]._prelim + v.children[-1]._prelim)
+        midpoint = 0.5 * (v.children[0]._prelim + v.children[-1]._prelim)
         w = left
         if w:
             v._prelim = w._prelim + _distance(v, w)
@@ -90,10 +99,12 @@ def _first_walk(v, left):
         else:
             v._prelim = midpoint
 
+
 def _distance(v, w):
     if v.parent == w.parent:
         return 1.0
     return 2.0
+
 
 def _apportion(v, default, left):
     w = left
@@ -129,23 +140,27 @@ def _apportion(v, default, left):
             default = v
     return default
 
+
 def _next_left(v):
     if v.children:
         return v.children[0]
     return v._thread
+
 
 def _next_right(v):
     if v.children:
         return v.children[-1]
     return v._thread
 
+
 def _move_subtree(wl, wr, shift):
     subtrees = wr._number - wl._number
-    wr._change -= shift/subtrees
+    wr._change -= shift / subtrees
     wr._shift += shift
-    wl._change += shift/subtrees
+    wl._change += shift / subtrees
     wr._prelim += shift
     wr._mod += shift
+
 
 def _execute_shifts(v):
     shift = 0.0
@@ -156,17 +171,15 @@ def _execute_shifts(v):
         change += w._change
         shift += w._shift + change
 
+
 def _ancestor(vil, v, default):
     if vil._ancestor.parent == v.parent:
         return vil._ancestor
     return default
+
 
 def _second_walk(v, m, level):
     v.x = v._prelim + m
     v.y = level
     for w in v.children:
         _second_walk(w, m + v._mod, level + 1.0)
-
-
-
-

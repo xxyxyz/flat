@@ -1,9 +1,9 @@
 from __future__ import division
+
 from random import random
+
 from .bezier import elevate2
-from .command import moveto, lineto, quadto, curveto, closepath
-
-
+from .command import closepath, curveto, lineto, moveto, quadto
 
 
 def elevated(commands):
@@ -21,12 +21,10 @@ def elevated(commands):
         yield c
 
 
-
-
 class _polygon_vertex(object):
-    
-    __slots__ = 'x', 'y', 'prev', 'next', 'neighbour', 'alpha', 'entry', 'visited'
-    
+
+    __slots__ = "x", "y", "prev", "next", "neighbour", "alpha", "entry", "visited"
+
     def __init__(self, x, y):
         self.x, self.y = x, y
         self.prev = self.next = self
@@ -34,7 +32,7 @@ class _polygon_vertex(object):
         self.alpha = 0.0
         self.entry = False
         self.visited = False
-    
+
     def vertices(self):
         v = self
         yield v
@@ -42,7 +40,7 @@ class _polygon_vertex(object):
         while v != self:
             yield v
             v = v.next
-    
+
     def commands(self):
         v = self
         yield moveto(v.x, v.y)
@@ -51,14 +49,14 @@ class _polygon_vertex(object):
             yield lineto(v.x, v.y)
             v = v.next
         yield closepath
-    
+
     def insert(self, other):
         v, w = self.next, other
         while 0.0 < v.alpha < w.alpha:
             v = v.next
         w.prev, w.next = v.prev, v
         v.prev.next = v.prev = w
-    
+
     def intersect(self, other):
         v0, v1 = self, self.next
         w0, w1 = other, other.next
@@ -68,16 +66,16 @@ class _polygon_vertex(object):
             w1 = w1.next
         x0, y0, x1, y1 = v0.x, v0.y, v1.x, v1.y
         x2, y2, x3, y3 = w0.x, w0.y, w1.x, w1.y
-        d = (x0 - x1)*(y2 - y3) - (x2 - x3)*(y0 - y1)
+        d = (x0 - x1) * (y2 - y3) - (x2 - x3) * (y0 - y1)
         if d == 0.0:
             return None
-        r = ((x0 - x2)*(y2 - y3) - (x2 - x3)*(y0 - y2))/d
+        r = ((x0 - x2) * (y2 - y3) - (x2 - x3) * (y0 - y2)) / d
         if r < 0.0 or r > 1.0:
             return None
-        s = ((x1 - x0)*(y0 - y2) - (x0 - x2)*(y1 - y0))/d
+        s = ((x1 - x0) * (y0 - y2) - (x0 - x2) * (y1 - y0)) / d
         if s < 0.0 or s > 1.0:
             return None
-        x, y = x0+(x1-x0)*r, y0+(y1-y0)*r
+        x, y = x0 + (x1 - x0) * r, y0 + (y1 - y0) * r
         v = _polygon_vertex(x, y)
         w = _polygon_vertex(x, y)
         v.alpha = r
@@ -86,7 +84,7 @@ class _polygon_vertex(object):
         w.neighbour = v
         v0.insert(v)
         w0.insert(w)
-    
+
     def inside(self, polygon):
         # Ref.: Hormann, K., Alexander, A. (2001). The point in polygon problem for arbitrary polygons.
         p, r = polygon, self
@@ -105,37 +103,39 @@ class _polygon_vertex(object):
                     if q.x > r.x:
                         inside = not inside
                     else:
-                        d = (p.x - r.x)*(q.y - r.y) - (q.x - r.x)*(p.y - r.y)
+                        d = (p.x - r.x) * (q.y - r.y) - (q.x - r.x) * (p.y - r.y)
                         if d == 0:
                             return True
                         if (d > 0) == (q.y > p.y):
                             inside = not inside
                 else:
                     if q.x > r.x:
-                        d = (p.x - r.x)*(q.y - r.y) - (q.x - r.x)*(p.y - r.y)
+                        d = (p.x - r.x) * (q.y - r.y) - (q.x - r.x) * (p.y - r.y)
                         if d == 0:
                             return True
                         if (d > 0) == (q.y > p.y):
                             inside = not inside
         return inside
 
+
 def _make_polygon(commands, perturbation):
     v = None
     for c in commands:
         if c == closepath:
             return v
-        x = c.x + (random()*2.0 - 1.0)*perturbation
-        y = c.y + (random()*2.0 - 1.0)*perturbation
+        x = c.x + (random() * 2.0 - 1.0) * perturbation
+        y = c.y + (random() * 2.0 - 1.0) * perturbation
         if isinstance(c, moveto):
             v = _polygon_vertex(x, y)
         elif isinstance(c, lineto):
             if not v:
-                raise ValueError('Missing `moveto` command.')
+                raise ValueError("Missing `moveto` command.")
             w = _polygon_vertex(x, y)
             w.prev, w.next = v.prev, v
             v.prev.next = v.prev = w
         else:
-            raise NotImplemented('Curved edges not supported.')
+            raise NotImplemented("Curved edges not supported.")
+
 
 def _clip_polygons(subject, clipper, operation, se, ce, perturbation):
     # Ref.: Greiner, G., Hormann, K. (1998). Efficient clipping of arbitrary polygons.
@@ -179,26 +179,25 @@ def _clip_polygons(subject, clipper, operation, se, ce, perturbation):
                     break
             result.append(closepath)
     if not result:
-        if operation == 'intersection':
+        if operation == "intersection":
             if se ^ ce:
                 result.extend(subject.commands())
                 result.extend(clipper.commands())
-        else: # union, difference
+        else:  # union, difference
             if not se:
                 result.extend(subject.commands())
             if not ce:
                 result.extend(clipper.commands())
     return result
 
+
 def union(subject, clipper, perturbation=0.0):
-    return _clip_polygons(subject, clipper, 'union', False, False, perturbation)
+    return _clip_polygons(subject, clipper, "union", False, False, perturbation)
+
 
 def intersection(subject, clipper, perturbation=0.0):
-    return _clip_polygons(subject, clipper, 'intersection', True, True, perturbation)
+    return _clip_polygons(subject, clipper, "intersection", True, True, perturbation)
+
 
 def difference(subject, clipper, perturbation=0.0):
-    return _clip_polygons(subject, clipper, 'difference', False, True, perturbation)
-
-
-
-
+    return _clip_polygons(subject, clipper, "difference", False, True, perturbation)
