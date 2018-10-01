@@ -1,4 +1,3 @@
-from __future__ import division
 from copy import copy
 from .misc import dump, scale
 
@@ -56,16 +55,16 @@ class placedgroup(object):
     
     def pdf(self, height, state, resources):
         dummy = copy(state)
-        code = '\n'.join(
+        code = b'\n'.join(
             item.pdf(0.0, dummy, resources) for item in self.item.items)
-        return 'q %s 0 0 %s %s %s cm\n%s\nQ' % (
+        return b'q %s 0 0 %s %s %s cm\n%s\nQ' % (
             dump(self.factor), dump(self.factor),
             dump(self.x), dump(height-self.y),
             code)
     
     def svg(self):
-        code = '\n'.join(item.svg() for item in self.item.items)
-        return '<g transform="matrix(%s, 0, 0, %s, %s, %s)">%s</g>' % (
+        code = b'\n'.join(item.svg() for item in self.item.items)
+        return b'<g transform="matrix(%s, 0, 0, %s, %s, %s)">%s</g>' % (
             dump(self.factor), dump(self.factor),
             dump(self.x), dump(self.y),
             code)

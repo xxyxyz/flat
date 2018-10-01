@@ -1,13 +1,9 @@
-from __future__ import division
 from math import copysign
 
 
 
 
-try:
-    from math import inf
-except ImportError:
-    inf = float('inf')
+from math import inf
 
 
 
@@ -38,7 +34,7 @@ def chunks(sequence, size):
 
 
 def dump(number):
-    return ('%.4f' % number).rstrip('0').rstrip('.')
+    return (b'%.4f' % number).rstrip(b'0').rstrip(b'.')
 
 
 

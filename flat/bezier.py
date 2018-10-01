@@ -1,4 +1,3 @@
-from __future__ import division
 from math import ceil, hypot, sqrt
 from .misc import similar
 from .polynomial import evaluate2, evaluate3, roots1, roots2

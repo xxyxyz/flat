@@ -1,4 +1,3 @@
-from __future__ import division
 from base64 import b64encode
 from math import ceil, exp, floor, log, pi, sin
 from .jpeg import jpeg, serialize as jpegserialize
@@ -61,7 +60,7 @@ class image(object):
     @staticmethod
     def open(path):
         with open(path, 'rb') as f:
-            data = bytearray(f.read()) # TODO python 3: bytearray -> bytes
+            data = f.read()
             if jpeg.valid(data):
                 source = jpeg(data)
                 rotation = source.rotation
@@ -537,23 +536,23 @@ class placedimage(object):
             elif rotation == 270:
                 a, b, c, d, e, f = 0, h, -w, 0, x+w, y
         resource = resources.image(self.item)
-        return 'q %s %s %s %s %s %s cm /%s Do Q' % (
+        return b'q %s %s %s %s %s %s cm /%s Do Q' % (
             dump(a), dump(b), dump(c), dump(d), dump(e), dump(f),
             resource.name)
     
     def svg(self):
         image = self.item
         if similar(self.width, self.height*(image.width/image.height)):
-            ratio = ''
+            ratio = b''
         else:
-            ratio = ' preserveAspectRatio="none"'
+            ratio = b' preserveAspectRatio="none"'
         if isinstance(image.source, png):
-            mime, data = 'image/png', image.source.readable.data
+            mime, data = b'image/png', image.source.readable.data
         else:
-            mime, data = 'image/jpeg', image.jpeg()
+            mime, data = b'image/jpeg', image.jpeg()
         return (
-            '<image x="%s" y="%s" width="%s" height="%s"%s '
-                'xlink:href="data:%s;base64,%s" />') % (
+            b'<image x="%s" y="%s" width="%s" height="%s"%s '
+                b'xlink:href="data:%s;base64,%s" />') % (
                 dump(self.x), dump(self.y),
                 dump(self.width), dump(self.height), ratio,
                 mime, b64encode(data))

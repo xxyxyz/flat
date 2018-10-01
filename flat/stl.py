@@ -1,4 +1,3 @@
-from __future__ import division
 import re
 import struct
 
@@ -6,7 +5,7 @@ import struct
 
 
 def isascii(data):
-    return data.startswith('solid ')
+    return data.startswith(b'solid ')
 
 def parseascii(data):
     triplets = []
@@ -39,7 +38,7 @@ def dump(triplets):
     for (ax, ay, az), (bx, by, bz), (cx, cy, cz) in triplets:
         pack(data, offset, ax, az, ay, bx, bz, by, cx, cz, cy)
         offset += 50
-    return data
+    return bytes(data)
 
 
 

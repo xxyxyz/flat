@@ -1,4 +1,3 @@
-from __future__ import division
 from array import array
 from struct import pack
 from .readable import readable
@@ -7,7 +6,7 @@ from .misc import clamp
 
 
 
-_z_z = bytearray([ # Zig-zag indices of AC coefficients
+_z_z = bytes([ # Zig-zag indices of AC coefficients
          1,  8, 16,  9,  2,  3, 10, 17, 24, 32, 25, 18, 11,  4,  5,
     12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13,  6,  7, 14, 21, 28,
     35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
@@ -16,24 +15,24 @@ _z_z = bytearray([ # Zig-zag indices of AC coefficients
 
 
 
-_luminance_quantization = bytearray([ # Luminance quantization table in zig-zag order
+_luminance_quantization = bytes([ # Luminance quantization table in zig-zag order
     16, 11, 12, 14, 12, 10, 16, 14, 13, 14, 18, 17, 16, 19, 24, 40,
     26, 24, 22, 22, 24, 49, 35, 37, 29, 40, 58, 51, 61, 60, 57, 51,
     56, 55, 64, 72, 92, 78, 64, 68, 87, 69, 55, 56, 80,109, 81, 87,
     95, 98,103,104,103, 62, 77,113,121,112,100,120, 92,101,103, 99])
-_chrominance_quantization = bytearray([ # Chrominance quantization table in zig-zag order
+_chrominance_quantization = bytes([ # Chrominance quantization table in zig-zag order
     17, 18, 18, 24, 21, 24, 47, 26, 26, 47, 99, 66, 56, 66, 99, 99,
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99])
 
-_ld_lengths = bytearray([ # Luminance DC code lengths
+_ld_lengths = bytes([ # Luminance DC code lengths
     0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
-_ld_values = bytearray([ # Luminance DC values
+_ld_values = bytes([ # Luminance DC values
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
-_la_lengths = bytearray([ # Luminance AC code lengths
+_la_lengths = bytes([ # Luminance AC code lengths
     0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 125])
-_la_values = bytearray([ # Luminance AC values
+_la_values = bytes([ # Luminance AC values
       1,  2,  3,  0,  4, 17,  5, 18, 33, 49, 65,  6, 19, 81, 97,  7, 34,113,
      20, 50,129,145,161,  8, 35, 66,177,193, 21, 82,209,240, 36, 51, 98,114,
     130,  9, 10, 22, 23, 24, 25, 26, 37, 38, 39, 40, 41, 42, 52, 53, 54, 55,
@@ -43,13 +42,13 @@ _la_values = bytearray([ # Luminance AC values
     164,165,166,167,168,169,170,178,179,180,181,182,183,184,185,186,194,195,
     196,197,198,199,200,201,202,210,211,212,213,214,215,216,217,218,225,226,
     227,228,229,230,231,232,233,234,241,242,243,244,245,246,247,248,249,250])
-_cd_lengths = bytearray([ # Chrominance DC code lengths
+_cd_lengths = bytes([ # Chrominance DC code lengths
     0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0])
-_cd_values = bytearray([ # Chrominance DC values
+_cd_values = bytes([ # Chrominance DC values
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
-_ca_lengths = bytearray([ # Chrominance AC code lengths
+_ca_lengths = bytes([ # Chrominance AC code lengths
     0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 119])
-_ca_values = bytearray([ # Chrominance AC values
+_ca_values = bytes([ # Chrominance AC values
       0,  1,  2,  3, 17,  4,  5, 33, 49,  6, 18, 65, 81,  7, 97,113, 19, 34,
      50,129,  8, 20, 66,145,161,177,193,  9, 35, 51, 82,240, 21, 98,114,209,
      10, 22, 36, 52,225, 37,241, 23, 24, 25, 26, 38, 39, 40, 41, 42, 53, 54,
@@ -318,7 +317,7 @@ def _parse_dri(readable):
 
 def _parse_app1(readable, length, rotation):
     end = readable.position + length
-    if readable.peek('Exif\0\0'):
+    if readable.peek(b'Exif\0\0'):
         readable.skip(5 + 1) # header, padding
         order = readable.uint16()
         if order == 0x4d4d: # MM
@@ -475,7 +474,7 @@ def _quantization_table(table, quality):
         q = 5000//quality
     else:
         q = 200 - quality*2
-    return bytearray([max(1, min((i*q + 50)//100, 255)) for i in table])
+    return bytes([max(1, min((i*q + 50)//100, 255)) for i in table])
 
 def _huffman_table(lengths, values):
     table = [None]*(max(values) + 1)
@@ -501,7 +500,7 @@ def _scale_factor(table):
     return factor
 
 def _marker_segment(marker, data):
-    return bytes('\xff' + marker + pack('>H', len(data) + 2) + data) # TODO python 3: remove bytes
+    return b'\xff' + marker + pack('>H', len(data) + 2) + data
 
 class _entropy_encoder(object):
     
@@ -556,7 +555,7 @@ class _entropy_encoder(object):
         self.length = length
     
     def dump(self):
-        return bytes(self.data) # TODO python 3: remove bytes
+        return self.data
 
 
 
@@ -565,7 +564,7 @@ class jpeg(object):
     
     @staticmethod
     def valid(data):
-        return data.startswith('\xff\xd8\xff')
+        return data.startswith(b'\xff\xd8\xff')
     
     def __init__(self, data):
         self.readable = r = readable(data)
@@ -695,7 +694,7 @@ class jpeg(object):
                                         data[j + 1] = clamp(u + 128)
                                         data[j + 2] = clamp(v + 128)
                                         data[j + 3] = clamp(k + 128)
-        if not self.readable.peek('\xff\xd9'): # EOI
+        if not self.readable.peek(b'\xff\xd9'): # EOI
             raise ValueError('Missing EOI segment.')
         return data
 
@@ -746,29 +745,29 @@ def serialize(image, quality):
                 vdc = e.encode(vdc, vblock, ls, ld, la)
                 kdc = e.encode(kdc, kblock, ls, ld, la)
     e.write(0x7f, 7) # padding
-    app = 'Adobe\0\144\200\0\0\0\0' # tag, version, flags0, flags1, transform
-    sof = '\10' + pack('>HHB', h, w, n) + '\1\21\0' # depth, id, sampling, qtable
-    sos = pack('B', n) + '\1\0' # id, htable
-    dqt = '\0' + lq
-    dht = '\0' + _ld_lengths + _ld_values + '\20' + _la_lengths + _la_values
+    app = b'Adobe\0\144\200\0\0\0\0' # tag, version, flags0, flags1, transform
+    sof = b'\10' + pack('>HHB', h, w, n) + b'\1\21\0' # depth, id, sampling, qtable
+    sos = pack('B', n) + b'\1\0' # id, htable
+    dqt = b'\0' + lq
+    dht = b'\0' + _ld_lengths + _ld_values + b'\20' + _la_lengths + _la_values
     if n == 3:
-        sof += '\2\21\1\3\21\1'
-        sos += '\2\21\3\21'
-        dqt += '\1' + cq
-        dht += '\1' + _cd_lengths + _cd_values + '\21' + _ca_lengths + _ca_values
+        sof += b'\2\21\1\3\21\1'
+        sos += b'\2\21\3\21'
+        dqt += b'\1' + cq
+        dht += b'\1' + _cd_lengths + _cd_values + b'\21' + _ca_lengths + _ca_values
     elif n == 4:
-        sof += '\2\21\0\3\21\0\4\21\0'
-        sos += '\2\0\3\0\4\0'
-    sos += '\0\77\0' # start, end, approximation
-    return ''.join([
-        '\xff\xd8', # SOI
-        _marker_segment('\xee', app) if n == 4 else '',
-        _marker_segment('\xdb', dqt),
-        _marker_segment('\xc0', sof),
-        _marker_segment('\xc4', dht),
-        _marker_segment('\xda', sos),
+        sof += b'\2\21\0\3\21\0\4\21\0'
+        sos += b'\2\0\3\0\4\0'
+    sos += b'\0\77\0' # start, end, approximation
+    return b''.join([
+        b'\xff\xd8', # SOI
+        _marker_segment(b'\xee', app) if n == 4 else b'',
+        _marker_segment(b'\xdb', dqt),
+        _marker_segment(b'\xc0', sof),
+        _marker_segment(b'\xc4', dht),
+        _marker_segment(b'\xda', sos),
         e.dump(),
-        '\xff\xd9']) # EOI
+        b'\xff\xd9']) # EOI
 
 
 

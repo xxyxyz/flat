@@ -1,4 +1,3 @@
-from __future__ import division
 from binascii import hexlify
 from os import urandom
 from .color import gray
@@ -11,7 +10,7 @@ from .png import png
 class null(object):
     
     def pdf(self):
-        return ''
+        return b''
 
 class boolean(object):
     
@@ -19,7 +18,7 @@ class boolean(object):
         self.value = value
     
     def pdf(self):
-        return 'true' if self.value else 'false'
+        return b'true' if self.value else b'false'
 
 class number(object):
     
@@ -35,7 +34,18 @@ class string(object):
         self.string = string
     
     def pdf(self):
-        return '(%s)' % self.string
+        special = b'()\\'
+        characters = [b'(']
+        for c in self.string:
+            if c < 0x21 or c > 0x7e: # '!', '~'
+                c = b'\\%03o' % c
+            elif c in special:
+                c = b'\\%c' % c
+            else:
+                c = b'%c' % c
+            characters.append(c)
+        characters.append(b')')
+        return b''.join(characters)
 
 class hexstring(object):
 
@@ -43,7 +53,7 @@ class hexstring(object):
         self.string = string
 
     def pdf(self):
-        return '<%s>' % hexlify(self.string)
+        return b'<%s>' % hexlify(self.string)
 
 class name(object):
     
@@ -51,13 +61,15 @@ class name(object):
         self.name = name
     
     def pdf(self):
-        special = '#()<>[]{}/%'
-        characters = ['/']
+        special = b'#()<>[]{}/%'
+        characters = [b'/']
         for c in self.name:
-            if c < '!' or c > '~' or c in special:
-                c = '#%x' % ord(c)
+            if c < 0x21 or c > 0x7e or c in special: # '!', '~'
+                c = b'#%02x' % c
+            else:
+                c = b'%c' % c
             characters.append(c)
-        return ''.join(characters)
+        return b''.join(characters)
 
 class array(object):
     
@@ -65,7 +77,7 @@ class array(object):
         self.array = array
     
     def pdf(self):
-        return '[%s]' % ' '.join(item.pdf() for item in self.array)
+        return b'[%s]' % b' '.join(item.pdf() for item in self.array)
 
 class dictionary(object):
     
@@ -73,8 +85,8 @@ class dictionary(object):
         self.dictionary = dictionary
     
     def pdf(self):
-        return '<< %s >>' % ' '.join(
-            '/%s %s' % (k, v.pdf()) for k, v in self.dictionary.items())
+        return b'<< %s >>' % b' '.join(
+            b'/%s %s' % (k, v.pdf()) for k, v in self.dictionary.items())
 
 class obj(object):
 
@@ -84,9 +96,9 @@ class obj(object):
     
     def pdf(self):
         return (
-            '%d 0 obj\n'
-            '%s\n'
-            'endobj') % (self.tag, self.item.pdf())
+            b'%d 0 obj\n'
+            b'%s\n'
+            b'endobj') % (self.tag, self.item.pdf())
 
 class stream(object):
     
@@ -98,12 +110,12 @@ class stream(object):
     def pdf(self):
         d = dictionary(self.dictionary)
         return (
-            '%d 0 obj\n'
-            '%s\n'
-            'stream\n'
-            '%s\n'
-            'endstream\n'
-            'endobj') % (self.tag, d.pdf(), self.stream)
+            b'%d 0 obj\n'
+            b'%s\n'
+            b'stream\n'
+            b'%s\n'
+            b'endstream\n'
+            b'endobj') % (self.tag, d.pdf(), self.stream)
 
 class reference(object):
     
@@ -111,7 +123,7 @@ class reference(object):
         self.obj = obj
     
     def pdf(self):
-        return '%d 0 R' % self.obj.tag
+        return b'%d 0 R' % self.obj.tag
 
 
 
@@ -129,7 +141,7 @@ class _graphic_state(object):
         self.cap = 'butt'
         self.join = 'miter'
         self.limit = 10.0
-        self.name = ''
+        self.name = b''
         self.size = 0.0
 
 
@@ -163,22 +175,22 @@ class _document_resources(object):
         if key not in self.spaces:
             if key not in self.cache:
                 self.cache[key] = _named_resource(
-                    'C%d' % len(self.spaces),
+                    b'C%d' % len(self.spaces),
                     obj(0, array([
-                        name('Separation'),
-                        name(color.name),
-                        name('DeviceCMYK'),
+                        name(b'Separation'),
+                        name(color.name.encode('utf-8')),
+                        name(b'DeviceCMYK'),
                         dictionary({
-                            'FunctionType': number(2),
-                            'Domain': array([number(0), number(1)]),
-                            'Range': array([number(0), number(1)]*4),
-                            'C0': array([number(0)]*4),
-                            'C1': array([
+                            b'FunctionType': number(2),
+                            b'Domain': array([number(0), number(1)]),
+                            b'Range': array([number(0), number(1)]*4),
+                            b'C0': array([number(0)]*4),
+                            b'C1': array([
                                 number(color.fallback.c/100.0),
                                 number(color.fallback.m/100.0),
                                 number(color.fallback.y/100.0),
                                 number(color.fallback.k/100.0)]),
-                            'N': number(1)})])))
+                            b'N': number(1)})])))
             self.spaces[key] = self.cache[key]
         return self.spaces[key]
     
@@ -209,61 +221,61 @@ class _document_resources(object):
                 defaultwidth = font.advances[-1]*k
                 fontfiledata = otf.embed()
                 fontfile = stream(0, {
-                    'Length': number(len(fontfiledata)),
-                    'Subtype' if cff else \
-                    'Length1':
-                        name('CIDFontType0C') if cff else \
+                    b'Length': number(len(fontfiledata)),
+                    b'Subtype' if cff else \
+                    b'Length1':
+                        name(b'CIDFontType0C') if cff else \
                         number(len(fontfiledata))}, fontfiledata)
                 descriptor = obj(0, dictionary({
-                    'Type': name('FontDescriptor'),
-                    'Ascent': number(ascent),
-                    'CapHeight': number(capheight),
-                    'Descent': number(descent),
-                    'Flags': number(flags),
-                    'FontBBox': array(map(number, bbox)),
-                    'FontName': name(font.name),
-                    'ItalicAngle': number(italic),
-                    'StemV': number(stemv),
-                    'FontFile3' if cff else 'FontFile2': reference(fontfile)}))
+                    b'Type': name(b'FontDescriptor'),
+                    b'Ascent': number(ascent),
+                    b'CapHeight': number(capheight),
+                    b'Descent': number(descent),
+                    b'Flags': number(flags),
+                    b'FontBBox': array(map(number, bbox)),
+                    b'FontName': name(font.name),
+                    b'ItalicAngle': number(italic),
+                    b'StemV': number(stemv),
+                    b'FontFile3' if cff else b'FontFile2': reference(fontfile)}))
                 tounicodedata = (
-                    '/CIDInit /ProcSet findresource begin\n'
-                    '12 dict begin\n'
-                    'begincmap\n'
-                    '/CIDSystemInfo << /Registry (%s) /Ordering (%s) /Supplement 0 >> def\n'
-                    '/CMapName /%s def\n'
-                    '/CMapType 2 def\n'
-                    '1 begincodespacerange <0000><ffff> endcodespacerange\n'
-                    '%s'
-                    'endcmap\n'
-                    'CMapName currentdict /CMap defineresource pop\n'
-                    'end\n'
-                    'end') % (font.name, font.name, font.name, ''.join(
-                        '%d beginbfchar %s endbfchar\n' % (
-                            len(chunk), ''.join('<%04x><%04x>' % c for c in chunk)
+                    b'/CIDInit /ProcSet findresource begin\n'
+                    b'12 dict begin\n'
+                    b'begincmap\n'
+                    b'/CIDSystemInfo << /Registry (%s) /Ordering (%s) /Supplement 0 >> def\n'
+                    b'/CMapName /%s def\n'
+                    b'/CMapType 2 def\n'
+                    b'1 begincodespacerange <0000><ffff> endcodespacerange\n'
+                    b'%s'
+                    b'endcmap\n'
+                    b'CMapName currentdict /CMap defineresource pop\n'
+                    b'end\n'
+                    b'end') % (font.name, font.name, font.name, b''.join(
+                        b'%d beginbfchar %s endbfchar\n' % (
+                            len(chunk), b''.join(b'<%04x><%04x>' % c for c in chunk)
                         ) for chunk in chunks(font.glyphmap(), 100)))
                 tounicode = stream(0, {
-                    'Length': number(len(tounicodedata))}, tounicodedata)
+                    b'Length': number(len(tounicodedata))}, tounicodedata)
                 self.dependencies.extend((fontfile, descriptor, tounicode))
                 self.cache[key] = _named_resource(
-                    'F%d' % len(self.fonts),
+                    b'F%d' % len(self.fonts),
                     obj(0, dictionary({
-                        'Type': name('Font'),
-                        'Subtype': name('Type0'),
-                        'BaseFont': name(font.name),
-                        'Encoding': name('Identity-H'),
-                        'DescendantFonts': array([dictionary({
-                            'Type': name('Font'),
-                            'Subtype': name('CIDFontType0' if cff else 'CIDFontType2'),
-                            'BaseFont': name(font.name),
-                            'CIDSystemInfo': dictionary({
-                                'Registry': string('Adobe'),
-                                'Ordering': string('Identity'),
-                                'Supplement': number(0)}),
-                            'FontDescriptor': reference(descriptor),
-                            'DW': number(defaultwidth),
-                            'W': array([number(0), array(map(number, widths))]),
-                            'CIDToGIDMap': name('Identity')})]),
-                        'ToUnicode': reference(tounicode)})))
+                        b'Type': name(b'Font'),
+                        b'Subtype': name(b'Type0'),
+                        b'BaseFont': name(font.name),
+                        b'Encoding': name(b'Identity-H'),
+                        b'DescendantFonts': array([dictionary({
+                            b'Type': name(b'Font'),
+                            b'Subtype': name(b'CIDFontType0' if cff else b'CIDFontType2'),
+                            b'BaseFont': name(font.name),
+                            b'CIDSystemInfo': dictionary({
+                                b'Registry': string(b'Adobe'),
+                                b'Ordering': string(b'Identity'),
+                                b'Supplement': number(0)}),
+                            b'FontDescriptor': reference(descriptor),
+                            b'DW': number(defaultwidth),
+                            b'W': array([number(0), array(map(number, widths))]),
+                            b'CIDToGIDMap': name(b'Identity')})]),
+                        b'ToUnicode': reference(tounicode)})))
             self.fonts[key] = self.cache[key]
         return self.fonts[key]
     
@@ -274,30 +286,29 @@ class _document_resources(object):
         else:
             key = data = image.jpeg()
             flate = False
-        key = bytes(key) # TODO python 3: remove bytes
         if key not in self.images:
             if key not in self.cache:
                 setup = {
-                    'Type': name('XObject'),
-                    'Subtype': name('Image'),
-                    'Width': number(image.width),
-                    'Height': number(image.height),
-                    'ColorSpace': name(
-                        'DeviceGray' if image.kind == 'g' else \
-                        'DeviceRGB' if image.kind == 'rgb' else 'DeviceCMYK'),
-                    'BitsPerComponent': number(8),
-                    'Filter': name('FlateDecode' if flate else 'DCTDecode'),
-                    'Length': number(len(data))}
+                    b'Type': name(b'XObject'),
+                    b'Subtype': name(b'Image'),
+                    b'Width': number(image.width),
+                    b'Height': number(image.height),
+                    b'ColorSpace': name(
+                        b'DeviceGray' if image.kind == 'g' else \
+                        b'DeviceRGB' if image.kind == 'rgb' else b'DeviceCMYK'),
+                    b'BitsPerComponent': number(8),
+                    b'Filter': name(b'FlateDecode' if flate else b'DCTDecode'),
+                    b'Length': number(len(data))}
                 if image.kind == 'cmyk':
-                    setup['Decode'] = array(map(number, [1, 0, 1, 0, 1, 0, 1, 0]))
+                    setup[b'Decode'] = array(map(number, [1, 0, 1, 0, 1, 0, 1, 0]))
                 if flate:
-                    setup['DecodeParms'] = dictionary({
-                        'Predictor': number(15),
-                        'Colors': number(image.n),
-                        'BitsPerComponent': number(8),
-                        'Columns': number(image.width)})
+                    setup[b'DecodeParms'] = dictionary({
+                        b'Predictor': number(15),
+                        b'Colors': number(image.n),
+                        b'BitsPerComponent': number(8),
+                        b'Columns': number(image.width)})
                 self.cache[key] = _named_resource(
-                    'I%d' % len(self.images),
+                    b'I%d' % len(self.images),
                     stream(0, setup, data))
             self.images[key] = self.cache[key]
         return self.images[key]
@@ -307,32 +318,32 @@ class _document_resources(object):
         if key not in self.states:
             if key not in self.cache:
                 self.cache[key] = _named_resource(
-                    'G%d' % len(self.states),
+                    b'G%d' % len(self.states),
                     obj(0, dictionary({
-                        'OP': boolean(stroke),
-                        'op': boolean(fill),
-                        'OPM': number(1)})))
+                        b'OP': boolean(stroke),
+                        b'op': boolean(fill),
+                        b'OPM': number(1)})))
             self.states[key] = self.cache[key]
         return self.states[key]
     
     def references(self):
         resources = {}
-        procedures = ['PDF']
+        procedures = [b'PDF']
         if self.spaces:
-            resources['ColorSpace'] = dictionary(
+            resources[b'ColorSpace'] = dictionary(
                 {r.name: r.reference for r in self.spaces.values()})
         if self.fonts:
-            resources['Font'] = dictionary(
+            resources[b'Font'] = dictionary(
                 {r.name: r.reference for r in self.fonts.values()})
-            procedures.append('Text')
+            procedures.append(b'Text')
         if self.images:
-            resources['XObject'] = dictionary(
+            resources[b'XObject'] = dictionary(
                 {r.name: r.reference for r in self.images.values()})
-            procedures.extend(['ImageB', 'ImageC', 'ImageI'])
+            procedures.extend([b'ImageB', b'ImageC', b'ImageI'])
         if self.states:
-            resources['ExtGState'] = dictionary(
+            resources[b'ExtGState'] = dictionary(
                 {r.name: r.reference for r in self.states.values()})
-        resources['ProcSet'] = array(map(name, procedures))
+        resources[b'ProcSet'] = array(map(name, procedures))
         return dictionary(resources)
     
     def objects(self):
@@ -364,7 +375,7 @@ def _page_boxes(bleed, cropmarks, page):
 def _page_fixes(bleed, cropmarks, page):
     w, h, mm = page.width, page.height, scale('mm')
     if cropmarks:
-        fragments = ['q', '0.25 w']
+        fragments = [b'q', b'0.25 w']
         lines = [
             (5*mm, 0, 5*mm, 2*mm),
             (5*mm, h+8*mm, 5*mm, h+10*mm),
@@ -375,17 +386,17 @@ def _page_fixes(bleed, cropmarks, page):
             (0, h+5*mm, 2*mm, h+5*mm),
             (w+8*mm, h+5*mm, w+10*mm, h+5*mm)]
         for x0, y0, x1, y1 in lines:
-            fragments.append('%s %s m %s %s l S' % (
+            fragments.append(b'%s %s m %s %s l S' % (
                 dump(x0), dump(y0), dump(x1), dump(y1)))
-        fragments.append('Q')
-        fragments.append('q 1 0 0 1 %s %s cm' % (dump(5*mm), dump(5*mm)))
-        prefix = '\n'.join(fragments)
+        fragments.append(b'Q')
+        fragments.append(b'q 1 0 0 1 %s %s cm' % (dump(5*mm), dump(5*mm)))
+        prefix = b'\n'.join(fragments)
     elif bleed:
-        prefix = 'q 1 0 0 1 %s %s cm' % (dump(3*mm), dump(3*mm))
-    return prefix, 'Q'
+        prefix = b'q 1 0 0 1 %s %s cm' % (dump(3*mm), dump(3*mm))
+    return prefix, b'Q'
 
 def serialize(document, compress, bleed, cropmarks):
-    header = '%PDF-1.3\n'
+    header = b'%PDF-1.3\n'
     pagesreference = reference(None)
     kids = []
     contents = []
@@ -393,57 +404,57 @@ def serialize(document, compress, bleed, cropmarks):
     for page in document.pages:
         mediabox, bleedbox, trimbox = _page_boxes(bleed, cropmarks, page)
         state.reset(); resources.reset()
-        code = '\n'.join(
+        code = b'\n'.join(
             item.pdf(page.height, state, resources) for item in page.items)
         if bleed or cropmarks:
             prefix, postfix = _page_fixes(bleed, cropmarks, page)
-            code = '%s\n%s\n%s' % (prefix, code, postfix)
-        content = stream(0, {'Length': number(len(code))}, code)
+            code = b'%s\n%s\n%s' % (prefix, code, postfix)
+        content = stream(0, {b'Length': number(len(code))}, code)
         kid = obj(0, dictionary({
-            'Type': name('Page'),
-            'Parent': pagesreference,
-            'MediaBox': mediabox,
-            'BleedBox': bleedbox,
-            'TrimBox': trimbox,
-            'Resources': resources.references(),
-            'Contents': reference(content)}))
+            b'Type': name(b'Page'),
+            b'Parent': pagesreference,
+            b'MediaBox': mediabox,
+            b'BleedBox': bleedbox,
+            b'TrimBox': trimbox,
+            b'Resources': resources.references(),
+            b'Contents': reference(content)}))
         kids.append(kid)
         contents.append(content)
     root = obj(0, dictionary({
-        'Type': name('Catalog'),
-        'Pages': pagesreference}))
+        b'Type': name(b'Catalog'),
+        b'Pages': pagesreference}))
     info = obj(0, dictionary({
-        'Title': string(document.title),
-        'Producer': string('Flat')}))
+        b'Title': string(document.title.encode('utf-8')),
+        b'Producer': string(b'Flat')}))
     pages = pagesreference.obj = obj(0, dictionary({
-        'Type': name('Pages'),
-        'Kids': array([reference(kid) for kid in kids]),
-        'Count': number(len(kids))}))
+        b'Type': name(b'Pages'),
+        b'Kids': array([reference(kid) for kid in kids]),
+        b'Count': number(len(kids))}))
     objects = [root, info, pages] + kids + resources.objects() + contents
     for i, o in enumerate(objects, 1):
         o.tag = i
-    fragments = ['%s\n' % o.pdf() for o in objects]
+    fragments = [b'%s\n' % o.pdf() for o in objects]
     position = len(header)
-    offsets = ['0000000000 65535 f \n']
+    offsets = [b'0000000000 65535 f \n']
     for fragment in fragments:
-        offsets.append('%010d 00000 n \n' % position)
+        offsets.append(b'%010d 00000 n \n' % position)
         position += len(fragment)
     xref = (
-        'xref\n'
-        '0 %d\n'
-        '%s') % (len(objects) + 1, ''.join(offsets))
+        b'xref\n'
+        b'0 %d\n'
+        b'%s') % (len(objects) + 1, b''.join(offsets))
     trailer = (
-        'trailer %s\n'
-        'startxref\n'
-        '%d\n'
-        '%%%%EOF') % (
+        b'trailer %s\n'
+        b'startxref\n'
+        b'%d\n'
+        b'%%%%EOF') % (
             dictionary({
-                'ID': array([hexstring(urandom(16))]*2),
-                'Root': reference(root),
-                'Info': reference(info),
-                'Size': number(len(offsets))}).pdf(),
+                b'ID': array([hexstring(urandom(16))]*2),
+                b'Root': reference(root),
+                b'Info': reference(info),
+                b'Size': number(len(offsets))}).pdf(),
             position)
-    return ''.join([header] + fragments + [xref, trailer])
+    return b''.join([header] + fragments + [xref, trailer])
 
 
 

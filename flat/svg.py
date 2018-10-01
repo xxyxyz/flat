@@ -1,4 +1,3 @@
-from __future__ import division
 from base64 import b64encode
 from xml.sax.saxutils import escape
 from .command import moveto, lineto, quadto, curveto, closepath
@@ -10,18 +9,18 @@ import re
 
 
 def parsepath(data):
-    tokens = re.compile('|'.join((
-        r'([+-]?(?:\d*\.\d+|\d+\.?)(?:[eE][+-]?\d+)?)', # number
-        r'([Mm])', # moveto
-        r'([Zz])', # closepath
-        r'([Ll])', # lineto
-        r'([Hh])', # horizontal lineto
-        r'([Vv])', # vertical lineto
-        r'([Cc])', # curveto
-        r'([Ss])', # smooth curveto
-        r'([Qq])', # quadto
-        r'([Tt])', # smooth quadto
-        r'([Aa])'))) # elliptical arc
+    tokens = re.compile(br'|'.join((
+        br'([+-]?(?:\d*\.\d+|\d+\.?)(?:[eE][+-]?\d+)?)', # number
+        br'([Mm])', # moveto
+        br'([Zz])', # closepath
+        br'([Ll])', # lineto
+        br'([Hh])', # horizontal lineto
+        br'([Vv])', # vertical lineto
+        br'([Cc])', # curveto
+        br'([Ss])', # smooth curveto
+        br'([Qq])', # quadto
+        br'([Tt])', # smooth quadto
+        br'([Aa])'))) # elliptical arc
     counts = 0, 0, 2, 0, 2, 1, 1, 6, 4, 4, 2, 7
     
     result, arguments = [], []
@@ -114,7 +113,7 @@ def parsepath(data):
                 raise NotImplementedError
             
             result.append(previous)
-            arguments = [] # TODO python 3: list.clear()
+            arguments.clear()
             m = tokens.search(data, m.end())
             if not m or m.lastindex != 1: # number
                 break
@@ -136,32 +135,32 @@ def serialize(page, compress):
                         data = style.font.source.readable.data
                         if name not in fonts:
                             fonts[name] = (
-                                '@font-face {\n'
-                                '    font-family: "%s";\n'
-                                '    src: url("data:font/sfnt;base64,%s");\n'
-                                '}') % (name, b64encode(data))
+                                b'@font-face {\n'
+                                b'    font-family: "%s";\n'
+                                b'    src: url("data:font/sfnt;base64,%s");\n'
+                                b'}') % (name, b64encode(data))
     if fonts:
         defs = (
-            '<defs>\n'
-            '<style>\n'
-            '%s\n'
-            '</style>\n'
-            '</defs>\n') % '\n'.join(fonts.values())
+            b'<defs>\n'
+            b'<style>\n'
+            b'%s\n'
+            b'</style>\n'
+            b'</defs>\n') % b'\n'.join(fonts.values())
     else:
-        defs = ''
+        defs = b''
     return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<!-- Flat -->\n'
-        '<svg version="1.1" '
-            'xmlns="http://www.w3.org/2000/svg" '
-            'xmlns:xlink="http://www.w3.org/1999/xlink" '
-            'width="%spt" height="%spt">\n'
-        '<title>%s</title>\n'
-        '%s%s\n'
-        '</svg>') % (
+        b'<?xml version="1.0" encoding="UTF-8"?>\n'
+        b'<!-- Flat -->\n'
+        b'<svg version="1.1" '
+            b'xmlns="http://www.w3.org/2000/svg" '
+            b'xmlns:xlink="http://www.w3.org/1999/xlink" '
+            b'width="%spt" height="%spt">\n'
+        b'<title>%s</title>\n'
+        b'%s%s\n'
+        b'</svg>') % (
             dump(page.width), dump(page.height),
             escape(page.title).encode('utf-8'),
-            defs, '\n'.join(item.svg() for item in page.items))
+            defs, b'\n'.join(item.svg() for item in page.items))
 
 
 

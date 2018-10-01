@@ -1,4 +1,3 @@
-from __future__ import division
 from random import random
 from .bezier import elevate2
 from .command import moveto, lineto, quadto, curveto, closepath

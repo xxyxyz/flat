@@ -1,4 +1,3 @@
-from __future__ import division
 from .misc import dump
 
 
@@ -17,10 +16,10 @@ class moveto(object):
         return self
     
     def pdf(self, k, x, y):
-        return '%s %s m' % (dump(self.x*k+x), dump(y-self.y*k))
+        return b'%s %s m' % (dump(self.x*k+x), dump(y-self.y*k))
     
     def svg(self, k, x, y):
-        return 'M%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
+        return b'M%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
     
     def rasterize(self, rasterizer, k, x, y):
         rasterizer.moveto(self.x*k+x, self.y*k+y)
@@ -41,10 +40,10 @@ class lineto(object):
         return self
     
     def pdf(self, k, x, y):
-        return '%s %s l' % (dump(self.x*k+x), dump(y-self.y*k))
+        return b'%s %s l' % (dump(self.x*k+x), dump(y-self.y*k))
     
     def svg(self, k, x, y):
-        return 'L%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
+        return b'L%s,%s' % (dump(self.x*k+x), dump(self.y*k+y))
     
     def rasterize(self, rasterizer, k, x, y):
         rasterizer.lineto(self.x*k+x, self.y*k+y)
@@ -71,7 +70,7 @@ class quadto(object):
         raise NotImplementedError('Not available in PDF.')
     
     def svg(self, k, x, y):
-        return 'Q%s,%s,%s,%s' % (
+        return b'Q%s,%s,%s,%s' % (
             dump(self.x1*k+x), dump(self.y1*k+y),
             dump(self.x*k+x), dump(self.y*k+y))
     
@@ -104,13 +103,13 @@ class curveto(object):
         return self
     
     def pdf(self, k, x, y):
-        return '%s %s %s %s %s %s c' % (
+        return b'%s %s %s %s %s %s c' % (
             dump(self.x1*k+x), dump(y-self.y1*k),
             dump(self.x2*k+x), dump(y-self.y2*k),
             dump(self.x*k+x), dump(y-self.y*k))
     
     def svg(self, k, x, y):
-        return 'C%s,%s,%s,%s,%s,%s' % (
+        return b'C%s,%s,%s,%s,%s,%s' % (
             dump(self.x1*k+x), dump(self.y1*k+y),
             dump(self.x2*k+x), dump(self.y2*k+y),
             dump(self.x*k+x), dump(self.y*k+y))

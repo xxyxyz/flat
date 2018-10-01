@@ -1,4 +1,3 @@
-from __future__ import division
 from math import hypot, sqrt
 from .bezier import arc3, chop3, inflections3, offset2, offset3, polyline2, polyline3, segments2, segments3, subdivide2, subdivide3
 from .image import image
@@ -440,7 +439,7 @@ class rasterizer(object):
                             data[i+3] = u + v
                         i += n
                 coverage -= area
-            scanline[:] = [] # TODO python 3: list.clear()
+            scanline.clear()
         self.top, self.bottom = self.image.height, 0
         return self.image
 

@@ -1,5 +1,3 @@
-from __future__ import division
-from itertools import imap # TODO python 3: imap -> map
 from math import cos, pi, sin, sqrt
 from multiprocessing import Pool
 from random import choice, random
@@ -334,7 +332,7 @@ class scene(object):
         return up, right, forward
     
     def clear(self):
-        del self.items[:] # TODO python 3: list.clear()
+        self.items.clear()
     
     def add(self, mesh, material):
         self.items.append((mesh, material))
@@ -362,7 +360,7 @@ class scene(object):
             pool = Pool(initializer=_render_initializer, initargs=context)
             result = pool.imap(_pathtracing_row, range(height))
         else:
-            result = imap(_pathtracing_row, range(height), context*height)
+            result = map(_pathtracing_row, range(height), context*height)
         rows = []
         step = 0
         for y, row in enumerate(result):

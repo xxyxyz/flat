@@ -1,4 +1,3 @@
-from __future__ import division
 from .misc import dump
 
 
@@ -16,10 +15,10 @@ class gray(object):
             self.intensity != other.intensity
     
     def pdfstroke(self):
-        return '%s G' % dump(self.intensity/255.0)
+        return b'%s G' % dump(self.intensity/255.0)
     
     def pdffill(self):
-        return '%s g' % dump(self.intensity/255.0)
+        return b'%s g' % dump(self.intensity/255.0)
     
     def svg(self):
         raise NotImplementedError('SVG does not support grayscale.')
@@ -69,19 +68,19 @@ class rgb(object):
             self.b != other.b
     
     def pdfstroke(self):
-        return '%s %s %s RG' % (
+        return b'%s %s %s RG' % (
             dump(self.r/255.0),
             dump(self.g/255.0),
             dump(self.b/255.0))
     
     def pdffill(self):
-        return '%s %s %s rg' % (
+        return b'%s %s %s rg' % (
             dump(self.r/255.0),
             dump(self.g/255.0),
             dump(self.b/255.0))
     
     def svg(self):
-        return 'rgb(%s,%s,%s)' % (
+        return b'rgb(%s,%s,%s)' % (
             dump(self.r),
             dump(self.g),
             dump(self.b))
@@ -134,14 +133,14 @@ class cmyk(object):
             self.k != other.k
     
     def pdfstroke(self):
-        return '%s %s %s %s K' % (
+        return b'%s %s %s %s K' % (
             dump(self.c/255.0),
             dump(self.m/255.0),
             dump(self.y/255.0),
             dump(self.k/255.0))
     
     def pdffill(self):
-        return '%s %s %s %s k' % (
+        return b'%s %s %s %s k' % (
             dump(self.c/255.0),
             dump(self.m/255.0),
             dump(self.y/255.0),
@@ -173,10 +172,10 @@ class spot(object):
         return other
     
     def pdfstroke(self, name):
-        return '/%s CS %s SCN' % (name, dump(self.tint/100.0))
+        return b'/%s CS %s SCN' % (name, dump(self.tint/100.0))
     
     def pdffill(self, name):
-        return '/%s cs %s scn' % (name, dump(self.tint/100.0))
+        return b'/%s cs %s scn' % (name, dump(self.tint/100.0))
     
     def svg(self):
         raise NotImplementedError('SVG does not yet support "device-nchannel".')

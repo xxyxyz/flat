@@ -1,4 +1,3 @@
-from __future__ import division
 from struct import Struct
 from zlib import compress, crc32, decompress
 from .readable import readable
@@ -29,7 +28,7 @@ def _adaptive_filtering(image):
         minimum = 0 # none
         for v in row:
             minimum += cache[v]
-        code, scanline = '\0', row
+        code, scanline = b'\0', row
         
         m = 0 # sub
         for i in range(0, n):
@@ -42,7 +41,7 @@ def _adaptive_filtering(image):
                 break
         else:
             minimum = m
-            code, scanline = '\1', s
+            code, scanline = b'\1', s
             s, t = t, s
         
         m = 0 # up
@@ -53,7 +52,7 @@ def _adaptive_filtering(image):
                 break
         else:
             minimum = m
-            code, scanline = '\2', s
+            code, scanline = b'\2', s
             s, t = t, s
         
         m = 0 # average
@@ -67,7 +66,7 @@ def _adaptive_filtering(image):
                 break
         else:
             minimum = m
-            code, scanline = '\3', s
+            code, scanline = b'\3', s
             s, t = t, s
         
         m = 0 # paeth
@@ -81,12 +80,12 @@ def _adaptive_filtering(image):
             if m >= minimum:
                 break
         else:
-            code, scanline = '\4', s
+            code, scanline = b'\4', s
         
         content.append(code)
-        content.append(bytes(scanline)) # TODO python 3: remove bytes
+        content.append(scanline)
         previous = row
-    return ''.join(content)
+    return b''.join(content)
 
 
 
@@ -95,13 +94,13 @@ class png(object):
     
     @staticmethod
     def valid(data):
-        return data.startswith('\x89PNG\r\n\x1a\n')
+        return data.startswith(b'\x89PNG\r\n\x1a\n')
     
     def __init__(self, data):
         self.readable = r = readable(data)
         r.skip(8) # header
         length, name = r.parse('>L4s')
-        if length != 13 or name != 'IHDR':
+        if length != 13 or name != b'IHDR':
             raise ValueError('Invalid IHDR chunk.')
         self.width, self.height, \
             depth, color, compression, fltr, interlace = r.parse('>LLBBBBB') # IHDR
@@ -130,18 +129,18 @@ class png(object):
         parts = []
         while True:
             length, name = r.parse('>L4s')
-            if name == 'IEND':
+            if name == b'IEND':
                 break
-            if name == 'IDAT':
+            if name == b'IDAT':
                 parts.append(r.read(length))
             else:
                 r.skip(length)
             r.skip(4) # CRC
-        return bytearray().join(parts)
+        return b''.join(parts)
     
     def decompress(self):
         wn, n = self.width*self.n, self.n
-        content = bytearray(decompress(bytes(self.idat()))) # TODO python 3: remove bytearray/bytes
+        content = bytearray(decompress(self.idat()))
         if (wn + 1)*self.height != len(content):
             raise ValueError('Invalid content length.')
         rows = []
@@ -182,8 +181,8 @@ def serialize(image, optimized):
     if image.kind not in ('g', 'ga', 'rgb', 'rgba'):
         raise ValueError('Invalid image kind.')
     L = Struct('>L').pack # unsigned long
-    color = '\0\4\2\6'[image.n - 1]
-    ihdr = L(image.width) + L(image.height) + '\10' + color + '\0\0\0'
+    color = (b'\0', b'\4', b'\2', b'\6')[image.n - 1]
+    ihdr = L(image.width) + L(image.height) + b'\10' + color + b'\0\0\0'
     if optimized:
         content = _adaptive_filtering(image)
     else:
@@ -191,15 +190,15 @@ def serialize(image, optimized):
         wn, n = image.width*image.n, image.n
         for y in range(image.height):
             offset = y*wn
-            parts.append('\0')
-            parts.append(bytes(image.data[offset:offset+wn])) # TODO python 3: remove bytes
-        content = ''.join(parts)
+            parts.append(b'\0')
+            parts.append(image.data[offset:offset+wn])
+        content = b''.join(parts)
     idat = compress(content, 9 if optimized else 6)
-    return ''.join((
-        '\x89PNG\r\n\x1a\n',
-        L(len(ihdr)), 'IHDR', ihdr, L(crc32(ihdr, crc32('IHDR')) & 0xffffffff),
-        L(len(idat)), 'IDAT', idat, L(crc32(idat, crc32('IDAT')) & 0xffffffff),
-        L(0), 'IEND', L(crc32('IEND') & 0xffffffff)))
+    return b''.join((
+        b'\x89PNG\r\n\x1a\n',
+        L(len(ihdr)), b'IHDR', ihdr, L(crc32(ihdr, crc32(b'IHDR')) & 0xffffffff),
+        L(len(idat)), b'IDAT', idat, L(crc32(idat, crc32(b'IDAT')) & 0xffffffff),
+        L(0), b'IEND', L(crc32(b'IEND') & 0xffffffff)))
 
 
 

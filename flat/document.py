@@ -1,4 +1,3 @@
-from __future__ import division
 from .misc import save, scale
 from .pdf import serialize as pdfserialize
 from .rasterizer import rasterizer

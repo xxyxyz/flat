@@ -1,4 +1,3 @@
-from __future__ import division
 from math import sqrt
 from .color import gray, spot, overprint
 from .command import moveto, lineto, curveto, closepath
@@ -28,7 +27,7 @@ class style(object):
         fo, ffo = isinstance(f, overprint), isinstance(ff, overprint)
         if s and so != sso or f and fo != ffo:
             resource = resources.overprint(so, fo)
-            fragments.append('/%s gs' % resource.name)
+            fragments.append(b'/%s gs' % resource.name)
         if so:
             s = s.color
         if fo:
@@ -52,44 +51,46 @@ class style(object):
                 fragments.append(f.pdffill())
             state.fill = f
         if self.width != state.width:
-            fragments.append('%s w' % dump(self.width))
+            fragments.append(b'%s w' % dump(self.width))
             state.width = self.width
         if self.cap != state.cap:
-            fragments.append('%d J' % (
+            fragments.append(b'%d J' % (
                 0 if self.cap == 'butt' else
                 1 if self.cap == 'round' else 2))
             state.cap = self.cap
         if self.join != state.join:
-            fragments.append('%d j' % (
+            fragments.append(b'%d j' % (
                 0 if self.join == 'miter' else
                 1 if self.join == 'round' else 2))
             state.join = self.join
         if self.limit != state.limit:
-            fragments.append('%s M' % dump(self.limit))
+            fragments.append(b'%s M' % dump(self.limit))
             state.limit = self.limit
-        return ' '.join(fragments)
+        return b' '.join(fragments)
     
     def pdfpaint(self):
         if self.stroke:
-            return 'B' if self.fill else 'S'
-        return 'f' if self.fill else 'n'
+            return b'B' if self.fill else b'S'
+        return b'f' if self.fill else b'n'
     
     def svg(self):
         if self.fill:
-            attributes = ['fill="%s"' % self.fill.svg()]
+            attributes = [b'fill="%s"' % self.fill.svg()]
         else:
-            attributes = ['fill="none"']
+            attributes = [b'fill="none"']
         if self.stroke:
-            attributes.append('stroke="%s"' % self.stroke.svg())
+            attributes.append(b'stroke="%s"' % self.stroke.svg())
             if self.width != 1.0:
-                attributes.append('stroke-width="%s"' % dump(self.width))
+                attributes.append(b'stroke-width="%s"' % dump(self.width))
             if self.cap != 'butt':
-                attributes.append('stroke-linecap="%s"' % self.cap)
+                attributes.append(b'stroke-linecap="%s"' % (
+                    b'round' if self.cap == 'round' else b'square'))
             if self.join != 'miter':
-                attributes.append('stroke-linejoin="%s"' % self.join)
+                attributes.append(b'stroke-linejoin="%s"' % (
+                    b'round' if self.join == 'round' else b'bevel'))
             elif self.limit != 4.0:
-                attributes.append('stroke-miterlimit="%s"' % dump(self.limit))
-        return ' '.join(attributes)
+                attributes.append(b'stroke-miterlimit="%s"' % dump(self.limit))
+        return b' '.join(attributes)
 
 
 
@@ -178,13 +179,13 @@ class line(object):
             lineto(self.x1, self.y1))
     
     def pdf(self, k, x, y):
-        return '%s %s m %s %s l %s' % (
+        return b'%s %s m %s %s l %s' % (
             dump(self.x0*k+x), dump(y-self.y0*k),
             dump(self.x1*k+x), dump(y-self.y1*k),
             self.style.pdfpaint())
     
     def svg(self, k, x, y):
-        return '<line x1="%s" y1="%s" x2="%s" y2="%s" %s />' % (
+        return b'<line x1="%s" y1="%s" x2="%s" y2="%s" %s />' % (
             dump(self.x0*k+x), dump(self.y0*k+y),
             dump(self.x1*k+x), dump(self.y1*k+y),
             self.style.svg())
@@ -222,19 +223,19 @@ class polyline(object):
             fragments.append(dump(cx*k + x))
             fragments.append(dump(y - cy*k))
             if i == 0:
-                fragments.append('m')
+                fragments.append(b'm')
             else:
-                fragments.append('l')
+                fragments.append(b'l')
         fragments.append(self.style.pdfpaint())
-        return ' '.join(fragments)
+        return b' '.join(fragments)
     
     def svg(self, k, x, y):
         fragments = []
         for c in self.coordinates:
             fragments.append(dump(c*k + x))
             x, y = y, x
-        return '<polyline points="%s" %s />' % (
-            ' '.join(fragments), self.style.svg())
+        return b'<polyline points="%s" %s />' % (
+            b' '.join(fragments), self.style.svg())
     
     def placed(self, k):
         return placedshape(self, k)
@@ -270,20 +271,20 @@ class polygon(object):
             fragments.append(dump(cx*k + x))
             fragments.append(dump(y - cy*k))
             if i == 0:
-                fragments.append('m')
+                fragments.append(b'm')
             else:
-                fragments.append('l')
-        fragments.append('h')
+                fragments.append(b'l')
+        fragments.append(b'h')
         fragments.append(self.style.pdfpaint())
-        return ' '.join(fragments)
+        return b' '.join(fragments)
     
     def svg(self, k, x, y):
         fragments = []
         for c in self.coordinates:
             fragments.append(dump(c*k + x))
             x, y = y, x
-        return '<polygon points="%s" %s />' % (
-            ' '.join(fragments), self.style.svg())
+        return b'<polygon points="%s" %s />' % (
+            b' '.join(fragments), self.style.svg())
     
     def placed(self, k):
         return placedshape(self, k)
@@ -311,13 +312,13 @@ class rectangle(object):
             closepath)
     
     def pdf(self, k, x, y):
-        return '%s %s %s %s re %s' % (
+        return b'%s %s %s %s re %s' % (
             dump(self.x*k+x), dump(y-(self.y+self.height)*k),
             dump(self.width*k), dump(self.height*k),
             self.style.pdfpaint())
     
     def svg(self, k, x, y):
-        return '<rect x="%s" y="%s" width="%s" height="%s" %s />' % (
+        return b'<rect x="%s" y="%s" width="%s" height="%s" %s />' % (
             dump(self.x*k+x), dump(self.y*k+y),
             dump(self.width*k), dump(self.height*k),
             self.style.svg())
@@ -343,7 +344,7 @@ class circle(object):
         return ellipse(self.style, self.x, self.y, self.r, self.r).pdf(k, x, y)
     
     def svg(self, k, x, y):
-        return '<circle cx="%s" cy="%s" r="%s" %s />' % (
+        return b'<circle cx="%s" cy="%s" r="%s" %s />' % (
             dump(self.x*k+x), dump(self.y*k+y),
             dump(self.r*k),
             self.style.svg())
@@ -386,12 +387,12 @@ class ellipse(object):
         x4, x0 = dump(x+rx), dump(x-rx)
         y4, y0 = dump(y+ry), dump(y-ry)
         return (
-            '%s %s m '
-            '%s %s %s %s %s %s c '
-            '%s %s %s %s %s %s c '
-            '%s %s %s %s %s %s c '
-            '%s %s %s %s %s %s c '
-            'h %s') % (
+            b'%s %s m '
+            b'%s %s %s %s %s %s c '
+            b'%s %s %s %s %s %s c '
+            b'%s %s %s %s %s %s c '
+            b'%s %s %s %s %s %s c '
+            b'h %s') % (
             x4, y2,
             x4, y1, x3, y0, x2, y0,
             x1, y0, x0, y1, x0, y2,
@@ -400,7 +401,7 @@ class ellipse(object):
             self.style.pdfpaint())
     
     def svg(self, k, x, y):
-        return '<ellipse cx="%s" cy="%s" rx="%s" ry="%s" %s />' % (
+        return b'<ellipse cx="%s" cy="%s" rx="%s" ry="%s" %s />' % (
             dump(self.x*k+x), dump(self.y*k+y),
             dump(self.rx*k), dump(self.ry*k),
             self.style.svg())
@@ -425,11 +426,11 @@ class path(object):
     def pdf(self, k, x, y):
         fragments = [c.pdf(k, x, y) for c in elevated(self.cs)]
         fragments.append(self.style.pdfpaint())
-        return ' '.join(fragments)
+        return b' '.join(fragments)
     
     def svg(self, k, x, y):
-        return '<path d="%s" %s />' % (
-            ' '.join(c.svg(k, x, y) for c in self.cs),
+        return b'<path d="%s" %s />' % (
+            b' '.join(c.svg(k, x, y) for c in self.cs),
             self.style.svg())
     
     def placed(self, k):
@@ -455,7 +456,7 @@ class placedshape(object):
         setup = self.item.style.pdf(state, resources)
         shape = self.item.pdf(self.k, self.x, height-self.y)
         if setup:
-            return '%s\n%s' % (setup, shape)
+            return b'%s\n%s' % (setup, shape)
         return shape
     
     def svg(self):

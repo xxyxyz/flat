@@ -1,9 +1,9 @@
 # 
 # Flat - Generative infrastructure for Python
 # 
-# http://xxyxyz.org/flat
+# https://xxyxyz.org/flat
 # 
-# Copyright (c) 2013-2017 Juraj Sukop
+# Copyright (c) 2013-2018 Juraj Sukop
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy 
 # of this software and associated documentation files (the "Software"), to 
@@ -39,7 +39,7 @@ __all__ = [
     'shape',
     'parsepath',
     'strike', 'paragraph', 'text', 'outlines']
-__version__ = '0.2'
+__version__ = '0.3'
 
 from .color import gray, ga, rgb, rgba, cmyk, spot, overprint
 from .command import moveto, lineto, quadto, curveto, closepath

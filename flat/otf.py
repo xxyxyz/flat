@@ -1,4 +1,3 @@
-from __future__ import division
 from math import hypot
 from struct import pack
 from unicodedata import normalize
@@ -13,14 +12,14 @@ class otf(object):
     
     @staticmethod
     def valid(data):
-        for version in ('\0\1\0\0', 'OTTO', 'true', 'typ1', 'ttcf'):
+        for version in (b'\0\1\0\0', b'OTTO', b'true', b'typ1', b'ttcf'):
             if data.startswith(version):
                 return True
         return False
     
     def __init__(self, data, index=0):
         self.readable = r = readable(data)
-        if data.startswith('ttcf'):
+        if data.startswith(b'ttcf'):
             r.skip(4 + 4) # TTCTag, Version
             numFonts = r.uint32()
             if index >= numFonts:
@@ -30,8 +29,8 @@ class otf(object):
         self.offset = offset(r)
         self.records = [record(r) for i in range(self.offset.numTables)]
         self.records.sort(key=lambda entry: entry.tag)
-        if data.startswith('OTTO'):
-            self.find('CFF ')
+        if data.startswith(b'OTTO'):
+            self.find(b'CFF ')
             self.cff = cff(r)
         else:
             self.cff = None
@@ -52,7 +51,7 @@ class otf(object):
             if entry.tag == tag:
                 self.readable.jump(entry.offset)
                 return entry
-        raise ValueError('`%s` table not found.' % tag)
+        raise ValueError('`%s` table not found.' % tag.decode())
     
     def psname(self):
         return self.name(6) # Postscript name
@@ -73,7 +72,7 @@ class otf(object):
     
     def charmap(self):
         r = self.readable
-        cmap = self.find('cmap')
+        cmap = self.find(b'cmap')
         r.skip(2) # version
         numTables = r.uint16()
         for i in range(numTables):
@@ -121,7 +120,7 @@ class otf(object):
         r = self.readable
         numberOfHMetrics = self.hhea().numberOfHMetrics
         result = []
-        hmtx = self.find('hmtx')
+        hmtx = self.find(b'hmtx')
         advanceWidth = 0
         for i in range(numberOfHMetrics):
             advanceWidth = r.uint16()
@@ -134,7 +133,7 @@ class otf(object):
         r = self.readable
         result = [{} for i in range(self.numGlyphs)]
         for entry in self.records:
-            if entry.tag == 'kern':
+            if entry.tag == b'kern':
                 r.jump(entry.offset)
                 r.skip(2) # version
                 nTables = r.uint16()
@@ -149,7 +148,7 @@ class otf(object):
                         left, right, value = r.uint16(), r.uint16(), r.int16()
                         result[left][right] = value
                 break
-            if entry.tag == 'GPOS':
+            if entry.tag == b'GPOS':
                 r.jump(entry.offset)
                 r.skip(2 + 2) # MajorVersion, MinorVersion
                 ScriptList = r.uint16()
@@ -163,7 +162,7 @@ class otf(object):
                 for i in range(FeatureCount):
                     FeatureTag = r.read(4)
                     Feature = r.uint16()
-                    if FeatureTag == 'kern':
+                    if FeatureTag == b'kern':
                         r.jump(entry.offset + FeatureList + Feature)
                         break
                 else:
@@ -226,9 +225,10 @@ class otf(object):
     def embed(self):
         r = self.readable
         if self.cff:
-            entry = self.find('CFF ')
+            entry = self.find(b'CFF ')
             return r.read(entry.length)
-        tags = 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep'
+        tags = {b'cvt ', b'fpgm', b'glyf', b'head', b'hhea', b'hmtx', b'loca',
+             b'maxp', b'prep'}
         numTables = 0
         for entry in self.records:
             if entry.tag in tags:
@@ -239,16 +239,16 @@ class otf(object):
         total = 0
         for entry in self.records:
             if entry.tag in tags:
-                if entry.tag == 'head':
+                if entry.tag == b'head':
                     head = position
                 r.jump(entry.offset)
                 length = entry.length
                 padding = 4 - length & 3
                 data = r.read(length)
-                records.append(pack('>4s3L', bytes(entry.tag),
-                    entry.checkSum, position, length)) # TODO python 3: remove bytes
+                records.append(pack('>4s3L', entry.tag,
+                    entry.checkSum, position, length))
                 tables.append(data)
-                tables.append('\0'*padding)
+                tables.append(b'\0'*padding)
                 position += length + padding
                 total += entry.checkSum
         entrySelector = numTables.bit_length() - 1
@@ -257,17 +257,17 @@ class otf(object):
         offset = pack('>L4H', self.offset.sfntVersion,
             numTables, entrySelector, searchRange, rangeShift)
         data = bytearray(offset)
-        data += ''.join(records)
+        data += bytearray().join(records)
         r = readable(data)
         for i in range(len(data)//4):
             total += r.uint32()
         data += bytearray().join(tables)
         data[head+8:head+12] = pack('>L', 0xb1b0afba - total & 0xffffffff)
-        return data
+        return bytes(data)
     
     def name(self, nameid):
         r = self.readable
-        name = self.find('name')
+        name = self.find(b'name')
         r.skip(2) # format
         count = r.uint16()
         stringOffset = r.uint16()
@@ -291,7 +291,7 @@ class otf(object):
     
     def loca(self, index):
         r = self.readable
-        loca = self.find('loca')
+        loca = self.find(b'loca')
         if self.indexToLocFormat == 0:
             r.skip(index*2)
             offset = r.uint16()*2
@@ -306,7 +306,7 @@ class otf(object):
         location = self.loca(index)
         if location == self.loca(index + 1):
             return result
-        glyf = self.find('glyf')
+        glyf = self.find(b'glyf')
         r.skip(location)
         numberOfContours = r.int16()
         r.skip(8) # xMin, yMin, xMax, yMax
@@ -400,23 +400,23 @@ class otf(object):
         return result
     
     def head(self):
-        self.find('head')
+        self.find(b'head')
         return head(self.readable)
     
     def hhea(self):
-        self.find('hhea')
+        self.find(b'hhea')
         return hhea(self.readable)
     
     def maxp(self):
-        self.find('maxp')
+        self.find(b'maxp')
         return maxp(self.readable)
     
     def os2(self):
-        self.find('OS/2')
+        self.find(b'OS/2')
         return os2(self.readable)
         
     def post(self):
-        self.find('post')
+        self.find(b'post')
         return post(self.readable)
 
 

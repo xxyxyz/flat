@@ -1,4 +1,3 @@
-from __future__ import division
 from xml.sax.saxutils import escape
 from .color import gray, spot, overprint
 from .misc import dump, inf, rmq, scale
@@ -8,8 +7,8 @@ import re
 
 
 
-linebreaks = re.compile(ur'\r\n|[\n\v\f\r\x85\u2028\u2029]') # TODO python 3: ur -> r
-boundaries = re.compile(ur'([^\s-]+-?|-|^)(\s*)') # TODO python 3: ur -> r
+linebreaks = re.compile(r'\r\n|[\n\v\f\r\x85\u2028\u2029]')
+boundaries = re.compile(r'([^\s-]+-?|-|^)(\s*)')
 
 
 
@@ -68,14 +67,14 @@ class style(object):
             n, s = self.font.name, self.size
             if n != state.name or s != state.size:
                 resource = resources.font(self.font)
-                fragments.append('/%s %s Tf' % (resource.name, dump(s)))
+                fragments.append(b'/%s %s Tf' % (resource.name, dump(s)))
                 state.name, state.size = n, s
         f, ff = self.color, state.fill
         fo, ffo = isinstance(f, overprint), isinstance(ff, overprint)
         if f and fo != ffo:
             sso = isinstance(state.stroke, overprint)
             resource = resources.overprint(sso, fo)
-            fragments.append('/%s gs' % resource.name)
+            fragments.append(b'/%s gs' % resource.name)
         if fo:
             f = f.color
         if ffo:
@@ -87,7 +86,7 @@ class style(object):
             else:
                 fragments.append(f.pdffill())
             state.fill = f
-        return ' '.join(fragments)
+        return b' '.join(fragments)
 
 
 
@@ -120,10 +119,10 @@ class strike(object):
         return paragraph((self.span(string),))
     
     def text(self, string):
-        return text(map(self.paragraph, linebreaks.split(string)))
+        return text(list(map(self.paragraph, linebreaks.split(string))))
     
     def outlines(self, string):
-        return outlines(map(self.paragraph, linebreaks.split(string)))
+        return outlines(list(map(self.paragraph, linebreaks.split(string))))
 
 
 
@@ -208,7 +207,7 @@ class layout(object):
             i += 1
     
     def reflow(self, width, height):
-        self.lines[:] = []
+        self.lines.clear()
         i, j, k = self.start
         u = len(self.paragraphs)
         y = 0.0
@@ -303,7 +302,7 @@ class layout(object):
     
     def clear(self):
         self.start = self.norm(self.tail())
-        self.lines[:] = []
+        self.lines.clear()
     
     def link(self, following):
         start = self.norm(self.end())
@@ -362,10 +361,10 @@ class placedtext(object):
             for height, run in self.layout.runs()]
     
     def pdf(self, height, state, resources):
-        fragments = ['BT',
-            '1 0 0 1 %s %s Tm' % (dump(self.x), dump(height-self.y))]
+        fragments = [b'BT',
+            b'1 0 0 1 %s %s Tm' % (dump(self.x), dump(height-self.y))]
         for height, run in self.layout.runs():
-            fragments.append('0 %s Td' % dump(-height))
+            fragments.append(b'0 %s Td' % dump(-height))
             for style, string in run:
                 setup = style.pdf(state, resources, True)
                 if setup:
@@ -378,13 +377,13 @@ class placedtext(object):
                     index = style.font.charmap.get(code, 0)
                     kerning = style.font.kerning[previous].get(index, 0)
                     if kerning != 0:
-                        line.append('%d' % round(kerning*factor))
-                    line.append('<%04x>' % index)
+                        line.append(b'%d' % round(kerning*factor))
+                    line.append(b'<%04x>' % index)
                     previous = index
                 if line:
-                    fragments.append('[%s] TJ' % ''.join(line))
-        fragments.append('ET')
-        return '\n'.join(fragments)
+                    fragments.append(b'[%s] TJ' % b''.join(line))
+        fragments.append(b'ET')
+        return b'\n'.join(fragments)
     
     def svg(self):
         fragments = []
@@ -392,15 +391,15 @@ class placedtext(object):
         for height, run in self.layout.runs():
             x = self.x
             y += height
-            line = ['<text x="%s" y="%s" xml:space="preserve">' % (dump(x), dump(y))]
+            line = [b'<text x="%s" y="%s" xml:space="preserve">' % (dump(x), dump(y))]
             for style, string in run:
                 line.append(
-                    '<tspan font-family="%s" font-size="%s" fill="%s">%s</tspan>' % (
-                        style.font.name, style.size, style.color.svg(),
+                    b'<tspan font-family="%s" font-size="%s" fill="%s">%s</tspan>' % (
+                        style.font.name, dump(style.size), style.color.svg(),
                         escape(string).encode('utf-8')))
-            line.append('</text>')
-            fragments.append(''.join(line))
-        return '\n'.join(fragments)
+            line.append(b'</text>')
+            fragments.append(b''.join(line))
+        return b'\n'.join(fragments)
     
     def rasterize(self, rasterizer, k, x, y):
         origin, y = self.x*k+x, self.y*k+y
@@ -446,11 +445,11 @@ class placedoutlines(placedtext):
                     commands = style.font.glyph(index)
                     if commands:
                         tokens = [c.pdf(factor, x, y) for c in elevated(commands)]
-                        tokens.append('f')
-                        fragments.append(' '.join(tokens))
+                        tokens.append(b'f')
+                        fragments.append(b' '.join(tokens))
                     x += style.font.advances[index]*factor
                     previous = index
-        return '\n'.join(fragments)
+        return b'\n'.join(fragments)
     
     def svg(self):
         fragments = []
@@ -467,12 +466,12 @@ class placedoutlines(placedtext):
                     x += style.font.kerning[previous].get(index, 0)*factor
                     commands = style.font.glyph(index)
                     if commands:
-                        fragments.append('<path d="%s" fill="%s" />' % (
-                            ' '.join(c.svg(factor, x, y) for c in commands),
+                        fragments.append(b'<path d="%s" fill="%s" />' % (
+                            b' '.join(c.svg(factor, x, y) for c in commands),
                             style.color.svg()))
                     x += style.font.advances[index]*factor
                     previous = index
-        return '\n'.join(fragments)
+        return b'\n'.join(fragments)
 
 
 
