@@ -109,9 +109,13 @@ class rgba(object):
     
     def pdffill(self):
         raise NotImplementedError('PDF does not support RGB + alpha.')
-    
+
     def svg(self):
-        raise NotImplementedError('SVG does not support RGB + alpha.')
+        return b'rgba(%s,%s,%s,%s)' % (
+            dump(self.r),
+            dump(self.g),
+            dump(self.b),
+            dump(self.a/255.0))
     
     def rasterize(self, rasterizer):
         if rasterizer.image.kind != 'rgba':
