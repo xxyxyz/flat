@@ -132,10 +132,10 @@ class closepath(object):
         return self
     
     def pdf(self, k, x, y):
-        return 'h'
+        return b'h'
     
     def svg(self, k, x, y):
-        return 'z'
+        return b'z'
     
     def rasterize(self, rasterizer, k, x, y):
         rasterizer.closepath()
