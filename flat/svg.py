@@ -154,8 +154,8 @@ def serialize(page, compress):
         b'<svg version="1.1" '
             b'xmlns="http://www.w3.org/2000/svg" '
             b'xmlns:xlink="http://www.w3.org/1999/xlink" '
-            b'viewBox="0 0 %s %s" '
-            b'width="%spt" height="%spt">\n'
+            b'width="%spt" height="%spt" '
+            b'viewBox="0 0 %s %s">\n'
         b'<title>%s</title>\n'
         b'%s%s\n'
         b'</svg>') % (
