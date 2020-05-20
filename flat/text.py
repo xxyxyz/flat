@@ -109,6 +109,7 @@ class strike(object):
 
     def tracking(self, tracking):
         self.tracking = tracking # Factor to self.size
+        return self
 
     def color(self, color):
         self.style.color = color
