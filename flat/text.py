@@ -21,7 +21,7 @@ class style(object):
         self.font = font
         self.size, self.leading = 10.0, 12.0
         self.color = gray(0)
-        self.tracking = 0
+        self.tracking = 0 # Factor of size
 
     def ascender(self):
         return self.font.ascender/self.font.density*self.size
@@ -100,13 +100,15 @@ class strike(object):
     def __init__(self, font):
         self.style = style(font)
 
-    def size(self, size, leading=0.0, units='pt', tracking=0):
+    def size(self, size, leading=0.0, units='pt'):
         if leading == 0.0:
             leading = 1.1*size + 1.0
         k = scale(units)
         self.style.size, self.style.leading = size*k, leading*k
-        self.style.tracking = tracking * self.style.size
         return self
+
+    def tracking(self, tracking):
+        self.tracking = tracking # Factor to self.size
 
     def color(self, color):
         self.style.color = color
@@ -380,7 +382,7 @@ class placedtext(object):
                     index = style.font.charmap.get(code, 0)
                     kerning = style.font.kerning[previous].get(index, 0)
                     if kerning != 0 or style.tracking != 0:
-                        line.append(b'%d' % round(kerning*factor-style.tracking))
+                        line.append(b'%d' % round(kerning*factor-style.tracking*style.size))
                     line.append(b'<%04x>' % index)
                     previous = index
                 if line:
@@ -394,6 +396,7 @@ class placedtext(object):
         for height, run in self.layout.runs():
             x = self.x
             y += height
+            # FIXME: Add tracking here
             line = [b'<text x="%s" y="%s" xml:space="preserve">' % (dump(x), dump(y))]
             for style, string in run:
                 line.append(
@@ -419,9 +422,8 @@ class placedtext(object):
                     for c in style.font.glyph(index):
                         c.rasterize(rasterizer, factor, x, y)
                     style.color.rasterize(rasterizer)
-                    x += style.font.advances[index]*factor
+                    x += style.font.advances[index]*factor + style.size*self.tracking
                     previous = index
-                x += style.tracking * len(string)
 
 
 
