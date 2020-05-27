@@ -423,7 +423,7 @@ class placedtext(object):
                     for c in style.font.glyph(index):
                         c.rasterize(rasterizer, factor, x, y)
                     style.color.rasterize(rasterizer)
-                    x += style.font.advances[index]*factor + style.size*self.tracking
+                    x += style.font.advances[index]*factor + style.size*style.tracking
                     previous = index
 
 
