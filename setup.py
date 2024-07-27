@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name = 'Flat',
     description = 'Generative infrastructure for Python',
-    version = '0.3.2',
+    version = '0.4',
     packages = ['flat'],
     author = 'Juraj Sukop',
     author_email = 'contact@xxyxyz.org',

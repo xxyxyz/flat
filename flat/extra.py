@@ -169,3 +169,57 @@ def _second_walk(v, m, level):
 
 
 
+class _bin_partition(object):
+    
+    __slots__ = 'x', 'y', 'width', 'height'
+    
+    def __init__(self, x, y, width, height):
+        self.x, self.y, self.width, self.height = x, y, width, height
+    
+    def admits(self, width, height):
+        return self.width >= width and self.height >= height
+    
+    def overlaps(self, x, y, width, height):
+        return self.x < x+width and self.x+self.width > x and self.y < y+height and self.y+self.height > y
+    
+    def contains(self, x, y, width, height):
+        return self.x <= x and self.x+self.width >= x+width and self.y <= y and self.y+self.height >= y+height
+    
+    def subdivide(self, x, y, width, height):
+        if self.x < x:
+            yield _bin_partition(self.x, self.y, x-self.x, self.height)
+        if self.x+self.width > x+width:
+            yield _bin_partition(x+width, self.y, self.x+self.width-(x+width), self.height)
+        if self.y < y:
+            yield _bin_partition(self.x, self.y, self.width, y-self.y)
+        if self.y+self.height > y+height:
+            yield _bin_partition(self.x, y+height, self.width, self.y+self.height-(y+height))
+
+
+
+
+class binpacker(object):
+    
+    def __init__(self, width, height):
+        self.partitions = [_bin_partition(0, 0, width, height)]
+    
+    def pack(self, width, height):
+        for partition in self.partitions:
+            if partition.admits(width, height):
+                break
+        else:
+            return 0, 0, False
+        x, y = partition.x, partition.y
+        partitions = []
+        for partition in self.partitions:
+            if partition.overlaps(x, y, width, height):
+                partitions.extend(partition.subdivide(x, y, width, height))
+            else:
+                partitions.append(partition)
+        self.partitions = [p for p in partitions if not any(
+            q.contains(p.x, p.y, p.width, p.height) for q in partitions if q != p)]
+        return x, y, True
+
+
+
+

@@ -3,7 +3,7 @@
 # 
 # https://xxyxyz.org/flat
 # 
-# Copyright (c) 2013-2020 Juraj Sukop
+# Copyright (c) 2013-2024 Juraj Sukop
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy 
 # of this software and associated documentation files (the "Software"), to 
@@ -25,11 +25,12 @@
 # 
 
 __all__ = [
+    'ean13',
     'gray', 'ga', 'rgb', 'rgba', 'cmyk', 'spot', 'overprint',
     'moveto', 'lineto', 'quadto', 'curveto', 'closepath',
     'document',
     'view',
-    'tree',
+    'tree', 'binpacker'
     'font',
     'group',
     'image', 'raw',
@@ -39,13 +40,14 @@ __all__ = [
     'shape',
     'parsepath',
     'strike', 'paragraph', 'text', 'outlines']
-__version__ = '0.3.2'
+__version__ = '0.4.0'
 
+from .barcode import ean13
 from .color import gray, ga, rgb, rgba, cmyk, spot, overprint
 from .command import moveto, lineto, quadto, curveto, closepath
 from .document import document
 from .even import view
-from .extra import tree
+from .extra import tree, binpacker
 from .font import font
 from .group import group
 from .image import image, raw
