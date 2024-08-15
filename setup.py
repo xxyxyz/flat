@@ -7,7 +7,7 @@ setup(
     packages = ['flat'],
     author = 'Juraj Sukop',
     author_email = 'contact@xxyxyz.org',
-    url = 'https://xxyxyz.org/flat',
+    url = 'https://github.com/xxyxyz/flat',
     license = 'MIT',
     classifiers = [
         'Development Status :: 3 - Alpha',

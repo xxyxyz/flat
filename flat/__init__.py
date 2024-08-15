@@ -1,7 +1,7 @@
 # 
 # Flat - Generative infrastructure for Python
 # 
-# https://xxyxyz.org/flat
+# https://github.com/xxyxyz/flat
 # 
 # Copyright (c) 2013-2024 Juraj Sukop
 # 
